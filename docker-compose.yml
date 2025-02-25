@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: myappdb
+    ports:
+      - "5432:5432" # Maps PostgreSQL port to your host
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Persists data
+
+volumes:
+  pgdata: # Named volume for data persistence
