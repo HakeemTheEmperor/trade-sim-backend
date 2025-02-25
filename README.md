@@ -32,6 +32,7 @@ After installing pipenv, run:
 pipenv install
 ```
 
+to install the packages and dependencies required for the application
 Activate the shell by running:
 
 ```bash
