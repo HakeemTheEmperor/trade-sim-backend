@@ -7,6 +7,7 @@ from ..models.wallet import Wallet, WalletCurrencyType
 from ..models.transactions import Transaction, TransactionType, TransactionCategory
 from ..models.exchangerate import ExchangeRate
 from .. import db
+from ..custom_exceptions import MissingProperties
 
 class TransactionsService:
     def get_transaction_history(self, user_id, wallet_id, currency, transaction_category, sort, page, rows):
@@ -17,7 +18,7 @@ class TransactionsService:
         
         try:
             if not wallet_id or not user_id:
-                raise ValueError("Missing Wallet Id or User's Id")
+                raise MissingProperties("Missing Wallet's Id or User's Id")
             query = Transaction.query
             query = query.filter(Transaction.user_id == user_id)
             query = query.filter(or_(Transaction.from_wallet_id == wallet_id, Transaction.to_wallet_id == wallet_id))
@@ -44,6 +45,8 @@ class TransactionsService:
                 "per_page": paginated_result.per_page,
                 "pages": paginated_result.pages
             }
+        except MissingProperties:
+            raise
         except KeyError:
             raise
         except ValueError:
