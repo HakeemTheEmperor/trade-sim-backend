@@ -25,10 +25,6 @@ def get_all_user_wallets():
 def get_user_wallet_by_id(wallet_id):
     user_id = get_jwt_identity()
     wallet = wallet_service.get_wallet_by_id(user_id, wallet_id)
-    if not wallet:
-        return jsonify({
-            "message": "Wallet not found",
-        }), 404
     return jsonify({
         "message": "Wallet retrieved successfully",
         "wallet": wallet
@@ -40,25 +36,7 @@ def get_user_wallet_by_id(wallet_id):
 def create_wallet():
     user_id = get_jwt_identity()
     currency = request.args.get("currency")
-    if not currency:
-        return jsonify({
-            "message": "Currency is required"
-        }), 400
-        
-    try:
-        currency_enum = WalletCurrencyType[currency]
-    except KeyError:
-        return jsonify({
-            "message": "Invalid currency type"
-        }), 400
-    
-    # Check if the user already has a wallet with the given currency
-    existing_wallet = wallet_service.get_wallet_by_currency(user_id, currency_enum)
-    if existing_wallet:
-        return jsonify({
-            "message": "A wallet with this currency already exists"
-        }), 409
-    new_wallet = wallet_service.create_wallet(user_id, currency_enum)
+    new_wallet = wallet_service.create_wallet(user_id, currency)
     return jsonify({
         "message": "Wallet Created Successfully",
         "wallet": new_wallet
@@ -83,14 +61,11 @@ def delete_wallet():
 def wallet_transfer():
     user_id = get_jwt_identity()
     data = request.get_json()
-    if not data or not all(key in data for key in ["from_wallet_id", "to_wallet_id", "amount"]):
-        return jsonify({
-            "error": "Missing required fields (sender_wallet_id, receiver_wallet_id, amount)"
-        }), 400
-    
+    if not data:
+        return jsonify({"error": "You did not enter any data"}), 400
     from_wallet_id = data["from_wallet_id"]
     to_wallet_id = data["to_wallet_id"]
-    amount = int(data["amount"])
+    amount = data["amount"]
     
     response = wallet_service.transfer_funds(from_wallet_id, to_wallet_id, amount, user_id)
     return jsonify(response), 200
