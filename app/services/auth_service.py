@@ -1,17 +1,13 @@
 from flask_jwt_extended import create_access_token
 from sqlalchemy.exc import IntegrityError
+
+from app.custom_exceptions import AlreadyExists, MissingProperties
 from ..models.user import User
 from ..models.wallet import Wallet, WalletCurrencyType
 from ..models.revokedtoken import RevokedToken
 from .. import db
 
-class AuthService:
-    def __init__(self):
-        self.users = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
-
-    def get_all_users(self):
-        return self.users
-    
+class AuthService:    
     def generate_token(self,user):
         try:
             additional_claims = {
@@ -28,15 +24,14 @@ class AuthService:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
     
-    
-    def get_user_by_id(self, user_id):
-        return next((user for user in self.users if user["id"] == user_id), None)
-    
     def create_user(self, first_name, last_name, email, password):
         # Check if email already exists
-        if User.query.filter_by(email= email).first():
-            raise ValueError('Email already exists')
         try:
+            if not first_name or not last_name or not email or not password:
+                raise MissingProperties("Could not create user as certain properties are missing")
+            existing_user = User.query.filter_by(email= email).first()
+            if existing_user:
+                raise AlreadyExists("A user with this email already exists")
             # Create user
             new_user = User(
                 first_name = first_name,
@@ -54,21 +49,24 @@ class AuthService:
             # Refresh the user to load the wallet relationship
             db.session.refresh(new_user)
             return new_user
+        except MissingProperties:
+            db.session.rollback()
+            raise
+        except AlreadyExists:
+            db.session.rollback()
+            raise
         except IntegrityError:
             db.session.rollback()
-            raise ValueError('Email might already be taken')
+            raise
         except Exception as e:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
     
     def admin_signup(self, first_name, last_name, email, password):
-        # Check if email already exists
-        existingUser = User.query.filter_by(email= email).first()
-        
-        if existingUser:
-            raise ValueError('User already exists')
-        
         try:
+            existing_user = User.query.filter_by(email= email).first()
+            if existing_user:
+                raise AlreadyExists("A user with this email already exists")
             new_user = User(
                 first_name = first_name,
                 last_name = last_name,
@@ -81,9 +79,12 @@ class AuthService:
             db.session.expire_all()
             return new_user.to_dict()
         
+        except AlreadyExists:
+            db.session.rollback()
+            raise
         except IntegrityError:
             db.session.rollback()
-            raise ValueError('Email might already be taken')
+            raise
         
         except Exception as e:
             db.session.rollback()

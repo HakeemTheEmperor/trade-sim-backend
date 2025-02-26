@@ -6,20 +6,6 @@ from ..utils.auth_utils import require_api_key, role_required
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 auth_service = AuthService()
 
-@bp.route("/", methods=["GET"])
-@require_api_key()
-@jwt_required()
-def get_users():
-    users = auth_service.get_all_users()
-    return jsonify(users)
-
-@bp.route("/<int:user_id>", methods=["GET"])
-def get_user(user_id):
-    user = auth_service.get_user_by_id(user_id)
-    if user:
-        return jsonify(user)
-    return jsonify({"error": "User not found"}), 404
-
 @bp.route("/admin-signup", methods=['POST'])
 @require_api_key()
 @role_required('admin')
@@ -56,7 +42,7 @@ def user_signup():
             "token": access_token,
             "user": new_user.to_dict()}), 201
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        raise
     
 @bp.route('/signin', methods=['POST'])
 @require_api_key()
