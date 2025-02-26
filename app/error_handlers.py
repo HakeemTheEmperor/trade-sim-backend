@@ -13,3 +13,7 @@ def register_error_handlers(app):
     @app.errorhandler(RuntimeError)
     def handle_runtime_error(e):
         return jsonify({'error': str(e)}), 500
+    
+    @app.errorhandler(KeyError)
+    def handle_key_error(e):
+        return jsonify({'error': 'Invalid request'}), 400

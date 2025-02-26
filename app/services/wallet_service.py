@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from flask_jwt_extended import create_access_token
 from sqlalchemy.exc import IntegrityError
 import os
 import requests

@@ -81,9 +81,11 @@ def create_app():
     # Register blueprints
     from .routes.auth_routes import bp as auth_bp
     from .routes.wallet_routes import bp as wallet_bp
+    from .routes.transactions_routes import bp as transaction_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
+    app.register_blueprint(transaction_bp)
     
     # Create tables
     with app.app_context():
