@@ -5,6 +5,7 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 from .error_handlers import register_error_handlers
+from .websocket_listener import WebSocketListener
 
 db = SQLAlchemy()
 jwt = JWTManager()
@@ -50,6 +51,15 @@ def create_admin():
     else:
         print("Admin user already exists")
 
+def seed_available_stock():
+    from .models.stock_available import AvailableStocks
+    default_symbols = ["AAPL", "GOOGL", "MSFT"]
+    for symbol in default_symbols:
+        if not AvailableStocks.query.filter_by(symbol=symbol).first():
+            db.session.add(AvailableStocks(symbol=symbol))
+    db.session.commit()
+    print("Default available symbols seeded")
+
 def create_app():
     load_dotenv()
     app = Flask(__name__)
@@ -74,6 +84,8 @@ def create_app():
     from .models.wallet import Wallet
     from .models.revokedtoken import RevokedToken
     from .models.exchangerate import ExchangeRate
+    from .models.stock_available import AvailableStocks
+    from .models.stock_price import StockPrice
     
     # Register Error Handlers
     register_error_handlers(app)
@@ -91,5 +103,8 @@ def create_app():
     with app.app_context():
         db.create_all()
         create_admin()
+        seed_available_stock()
+        websocket_listener = WebSocketListener(app)
+        websocket_listener.start()
 
     return app

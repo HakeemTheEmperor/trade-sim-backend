@@ -10,6 +10,7 @@ psycopg2-binary = "*"
 flask-jwt-extended = "*"
 python-dotenv = "*"
 requests = "*"
+websocket-client = "*"
 
 [dev-packages]
 
