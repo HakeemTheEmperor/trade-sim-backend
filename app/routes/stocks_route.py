@@ -17,3 +17,27 @@ def get_all_stocks():
             "message": "Stocks retrieved successfully",
             "stocks": stocks
         }), 200
+    
+@bp.route("/symbol/<symbol>", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_stock_by_symbol(symbol):
+    result = stocks_service.get_stocks_by_symbol(symbol)
+    if not result:
+        return jsonify({"message": "Stock not found", "stocks": []}), 404
+    return jsonify({
+            "message": "Stocks retrieved successfully",
+            "stocks": result
+        }), 200
+    
+@bp.route("/company/<name>", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_stocks_by_company_name(name):
+    result = stocks_service.get_stocks_by_company_name(name)
+    if not result:
+        return jsonify({"message": "Company not found", "stocks": []}), 404
+    return jsonify({
+        "message": "Stocks retrieved successfully",
+        "stocks": result
+        }), 200
