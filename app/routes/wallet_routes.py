@@ -17,7 +17,7 @@ def get_all_user_wallets():
     return jsonify({
         "message": "Wallets retrieved successfully",
         "wallets": wallets
-    })
+    }), 200
     
 @bp.route("/<int:wallet_id>", methods=["GET"])
 @require_api_key()

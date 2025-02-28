@@ -53,7 +53,7 @@ def create_admin():
 
 def seed_available_stock():
     from .models.stock_available import AvailableStocks
-    default_symbols = ["AAPL", "GOOGL", "MSFT"]
+    default_symbols = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOG", "META", "BRK-B", "TSM", "TSLA", "WMT", "JPM", "V", "MA", "ORCL", "UNH", "XOM", "NFLX", "PG", "HD", "KO", "TMUS", "CVX", "NESN.SW", "005930.KS", "TM", "PM", "IBM", "MCD", "AXP", "DIS", "SHEL", "GS", "ADBE", "SIE.DE", "CAT", "CBA.AX", "XIACF", "UBER", "SONY", "SHOP", "UL", "TTE", "SBUX", "SPOT", "NKE", "INTC", "UPS", "RACE", "ABNB"]
     for symbol in default_symbols:
         if not AvailableStocks.query.filter_by(symbol=symbol).first():
             db.session.add(AvailableStocks(symbol=symbol))
@@ -86,6 +86,7 @@ def create_app():
     from .models.exchangerate import ExchangeRate
     from .models.stock_available import AvailableStocks
     from .models.stock_price import StockPrice
+    from .data_seed import DataSeed
     
     # Register Error Handlers
     register_error_handlers(app)
@@ -94,16 +95,18 @@ def create_app():
     from .routes.auth_routes import bp as auth_bp
     from .routes.wallet_routes import bp as wallet_bp
     from .routes.transactions_routes import bp as transaction_bp
+    from .routes.stocks_route import bp as stocks_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(transaction_bp)
+    app.register_blueprint(stocks_bp)
     
     # Create tables
     with app.app_context():
         db.create_all()
         create_admin()
-        seed_available_stock()
+        # DataSeed.load_available_stocks()
         websocket_listener = WebSocketListener(app)
         websocket_listener.start()
 
