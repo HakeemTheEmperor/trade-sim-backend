@@ -1,3 +1,4 @@
+from decimal import Decimal
 import os
 import requests
 
@@ -6,6 +7,7 @@ class DataSeed:
     def load_available_stocks():
         from . import db
         from .models.stock_available import AvailableStocks
+        from .models.stock_price import StockPrice
         api_key = os.getenv("FMP_API_KEY")
         base_url = "https://financialmodelingprep.com/api/v3/profile/"
         default_symbols = [
@@ -46,7 +48,19 @@ class DataSeed:
                     )
                     db.session.add(stock)
                 print(f"Loaded {symbol} - {stock_data.get('companyName')}")
-
+                price_decimal = Decimal(str(stock_data.get("price")))
+                
+                stock_price = StockPrice.query.filter_by(symbol=symbol).first()
+                if stock_price:
+                    stock_price.previous_price = stock_price.current_price
+                    stock_price.current_price = price_decimal
+                    if stock_price.previous_price > 0:
+                        stock_price.percentage_change = ((stock_price.current_price - stock_price.previous_price)/ stock_price.previous_price) * 100
+                    else:
+                        stock_price.percentage_change = 0
+                else:
+                    stock_price = StockPrice(symbol=symbol, current_price=price_decimal)
+                db.session.add(stock_price)
             # Commit all changes in one go
             db.session.commit()
 

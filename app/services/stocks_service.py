@@ -1,4 +1,6 @@
+from app.custom_exceptions import DataNotFound
 from ..models.stock_available import AvailableStocks
+from ..models.stock_price import StockPrice
 from ..models.wallet import Wallet
 
 class StocksService:
@@ -20,5 +22,14 @@ class StocksService:
         try:
             stocks = AvailableStocks.query.filter(AvailableStocks.company_name.ilike(f"%{name}%")).all()
             return [stock.to_dict() for stock in stocks]
+        except Exception as e:
+            raise RuntimeError(f"An unexpected error occured: {str(e)}")
+        
+    def get_stocks_price(self, symbol):
+        try:
+            stock = StockPrice.query.filter_by(symbol=symbol).first()
+            if not stock:
+                raise DataNotFound(f"No stock with symbol {symbol} found")
+            return stock.to_dict()
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")

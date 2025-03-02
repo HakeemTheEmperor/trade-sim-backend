@@ -41,3 +41,10 @@ def get_stocks_by_company_name(name):
         "message": "Stocks retrieved successfully",
         "stocks": result
         }), 200
+    
+@bp.route("/stock/price/<symbol>", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_stock_price(symbol):
+    result = stocks_service.get_stocks_price(symbol)
+    return jsonify({"message": "Stock price fetched successfully", "data": result}), 200

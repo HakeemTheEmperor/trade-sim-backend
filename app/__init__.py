@@ -106,7 +106,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         create_admin()
-        # DataSeed.load_available_stocks()
+        DataSeed.load_available_stocks()
         websocket_listener = WebSocketListener(app)
         websocket_listener.start()
 
