@@ -13,8 +13,8 @@ class Wallet(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     balance = db.Column(db.Float, default=100000.00, nullable=False)
     currency = db.Column(db.Enum(WalletCurrencyType), default=WalletCurrencyType.USD, nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
-    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
     
     # Fix: Use a string reference for Transaction to avoid circular import
     sent_transactions = db.relationship('Transaction', foreign_keys='[Transaction.from_wallet_id]', backref='sender_wallet', lazy=True)

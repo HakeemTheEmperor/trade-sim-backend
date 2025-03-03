@@ -35,7 +35,7 @@ class Transaction(db.Model):
     price_per_share = db.Column(db.Float, nullable=True)
     total_value = db.Column(db.Float, nullable=False)
     currency = db.Column(db.Enum(WalletCurrencyType), nullable=False)
-    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
+    timestamp = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     
     def to_dict(self):
         return {
