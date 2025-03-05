@@ -9,9 +9,6 @@ class StockPrice(db.Model):
     previous_price = db.Column(db.Numeric(15, 6), nullable=False, default=0)
     percentage_change = db.Column(db.Numeric(15, 6), nullable=False, default=0)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=db.func.now(), onupdate=db.func.now())
-    
-    # Relationship to AvailableStocks
-    available_stock = db.relationship('AvailableStocks', back_populates='price')
 
     def to_dict(self):
         return {

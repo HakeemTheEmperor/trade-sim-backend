@@ -53,11 +53,3 @@ class Transaction(db.Model):
             "time": self.timestamp.isoformat()
         }
 
-    # Validation to update total value for stock transactions
-    @validates("quantity", "price_per_share")
-    def update_total_value(self, key, value):
-        setattr(self, key, value)
-        if self.quantity and self.price_per_share:
-            self.total_value = self.quantity * self.price_per_share
-        return value
-

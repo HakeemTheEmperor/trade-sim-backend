@@ -12,9 +12,9 @@ class AvailableStocks(db.Model):
     image = db.Column(db.String(255), nullable=False)
     
     # Relationship to StockPrice
-    price = db.relationship('StockPrice', back_populates='available_stock', uselist=False, lazy='select')
+    price = db.relationship('StockPrice', backref='available_stock', uselist=False, lazy='joined')
 
-    def to_dict(self):
+    def to_dict(self, include_price=True):
         return {
             'id': self.id,
             'symbol': self.symbol,
@@ -23,5 +23,5 @@ class AvailableStocks(db.Model):
             'market_cap': self.market_cap,
             'sector': self.sector,
             'image': self.image,
-            'price': self.price.to_dict() if self.price else None  # Handle None case
+            'price': self.price.to_dict() if self.price and include_price else None  # Handle None case
         }

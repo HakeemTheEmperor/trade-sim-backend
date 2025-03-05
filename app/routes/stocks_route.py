@@ -15,7 +15,7 @@ def get_all_stocks():
         return jsonify({"error": "No available stocks"}), 404
     return jsonify({
             "message": "Stocks retrieved successfully",
-            "stocks": stocks
+            "data": stocks
         }), 200
     
 @bp.route("/symbol/<symbol>", methods=["GET"])
@@ -27,7 +27,7 @@ def get_stock_by_symbol(symbol):
         return jsonify({"message": "Stock not found", "stocks": []}), 404
     return jsonify({
             "message": "Stocks retrieved successfully",
-            "stocks": result
+            "data": result
         }), 200
     
 @bp.route("/company/<name>", methods=["GET"])
@@ -39,7 +39,7 @@ def get_stocks_by_company_name(name):
         return jsonify({"message": "Company not found", "stocks": []}), 404
     return jsonify({
         "message": "Stocks retrieved successfully",
-        "stocks": result
+        "data": result
         }), 200
     
 @bp.route("/stock/price/<symbol>", methods=["GET"])
@@ -48,3 +48,39 @@ def get_stocks_by_company_name(name):
 def get_stock_price(symbol):
     result = stocks_service.get_stocks_price(symbol)
     return jsonify({"message": "Stock price fetched successfully", "data": result}), 200
+
+@bp.route("/buy", methods=["POST"])
+@require_api_key()
+@jwt_required()
+def buy_stock():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    if not data or not all(key in data for key in ["symbol", "quantity", "wallet_id"]):
+        return jsonify({"error": "Missing required fields"}), 400
+    symbol = data.get('symbol')
+    quantity = data.get('quantity')
+    wallet_id = data.get("wallet_id")
+    message = stocks_service.buy_stocks(user_id, symbol, wallet_id, quantity)
+    return jsonify(message), 200
+
+@bp.route("/sell", methods=["POST"])
+@require_api_key()
+@jwt_required()
+def sell_stock():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    if not data or not all(key in data for key in ["symbol", "quantity", "wallet_id"]):
+        return jsonify({"error": "Missing required fields"}), 400
+    symbol = data.get('symbol')
+    quantity = data.get('quantity')
+    wallet_id = data.get("wallet_id")
+    message = stocks_service.sell_stock(user_id, symbol, wallet_id, quantity)
+    return jsonify(message), 200
+
+@bp.route("/user", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_all_user_stocks():
+    user_id = get_jwt_identity()
+    result = stocks_service.get_all_user_stocks(user_id)
+    return jsonify({"message": "Stocks retrieved successfully", "data": result}), 200

@@ -1,5 +1,12 @@
+from enum import Enum
 from .. import db
 from werkzeug.security import generate_password_hash, check_password_hash
+
+class UserRoles(Enum):
+    """ Enum for user roles """
+    ADMIN = "ADMIN"
+    USER = "USER"
+    SUPER_ADMIN = "SUPERADMIN"
 
 class User(db.Model):
     __tablename__ = "users"
@@ -15,6 +22,7 @@ class User(db.Model):
     # Relationship (One user -> Many transactions)
     transactions = db.relationship("Transaction", backref="user", lazy=True)
     wallets = db.relationship('Wallet', backref='user', lazy=True)
+    stock_wallets = db.relationship('UserStockWallet', backref='user', lazy=True)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
