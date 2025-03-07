@@ -36,7 +36,6 @@ class WalletService:
     def fetch_from_api(self, from_currency, to_currency):
         try:
             url = f"{EXCHANGE_RATE_API}/{from_currency.value}/{to_currency.value}"
-            print(url)
             response = requests.get(url)
             data = response.json()
             if data.get("result") != "success":

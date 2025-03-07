@@ -3,7 +3,6 @@ from .. import db
 from werkzeug.security import generate_password_hash, check_password_hash
 
 class UserRoles(Enum):
-    """ Enum for user roles """
     ADMIN = "ADMIN"
     USER = "USER"
     SUPER_ADMIN = "SUPERADMIN"
@@ -17,7 +16,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False) 
     created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
-    role = db.Column(db.String(50), default="user")
+    role = db.Column(db.Enum(UserRoles), default=UserRoles.USER, nullable=False)
     
     # Relationship (One user -> Many transactions)
     transactions = db.relationship("Transaction", backref="user", lazy=True)
@@ -36,7 +35,7 @@ class User(db.Model):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "email": self.email,
-            "role": self.role,
+            "role": self.role.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             'wallets': [wallet.to_dict() for wallet in self.wallets]

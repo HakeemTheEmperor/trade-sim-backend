@@ -74,7 +74,6 @@ class StocksService:
                 currency=wallet.currency,
                 total_value=total_cost
             )
-            print("Got here x")
             db.session.add(transaction_log)
             db.session.add(stock_wallet)
             db.session.commit()

@@ -14,7 +14,7 @@ class AuthService:
                 'first_name':user.first_name, 
                 'last_name':user.last_name, 
                 'email':user.email, 
-                'role':user.role
+                'role':user.role.value
             }
             access_token = create_access_token(
                 identity=str(user.id), 
@@ -48,6 +48,7 @@ class AuthService:
             
             # Refresh the user to load the wallet relationship
             db.session.refresh(new_user)
+
             return new_user
         except MissingProperties:
             db.session.rollback()

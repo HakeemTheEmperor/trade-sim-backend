@@ -30,7 +30,7 @@ def missing_token_callback(error):
 
 
 def create_admin():
-    from .models.user import User
+    from .models.user import User, UserRoles
     from werkzeug.security import generate_password_hash
     
     admin_email = os.getenv("ADMIN_EMAIL")
@@ -42,7 +42,7 @@ def create_admin():
             email=admin_email,
             first_name="Super",
             last_name="Admin",
-            role="admin"
+            role=UserRoles.SUPER_ADMIN
         )
         admin_user.set_password(admin_password)
         db.session.add(admin_user)
