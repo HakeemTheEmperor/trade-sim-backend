@@ -1,14 +1,15 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+import os
 from ..services.auth_service import AuthService
 from ..utils.auth_utils import require_api_key, role_required
 
-bp = Blueprint("auth", __name__, url_prefix="/auth")
+bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 auth_service = AuthService()
 
 @bp.route("/admin-signup", methods=['POST'])
 @require_api_key()
-@role_required('admin')
+@role_required('SUPERADMIN')
 def admin_create():
     data = request.get_json()
     if not data or not all(key in data for key in ["first_name", "last_name", "email", "password"]):
@@ -68,15 +69,17 @@ def debug_token():
     return jsonify({"user_id": user_id, "claims": claims})
 
 @bp.route("/logout", methods=["GET"])
+@require_api_key()
 @jwt_required()
 def logout():
     jti = get_jwt()["jti"]
     logged_out = auth_service.logout(jti)
     if logged_out:
-        return jsonify({"message": "You have successfully logged out of your account"}), 200
-    return jsonify({"message": "We were unable to log you out of your account"}), 404
+        return jsonify({"message": "You have successfully logged out of your account", "status_code": 200, "status": "SIGN OUT SUCCESS"}), 200
+    return jsonify({"message": "We were unable to log you out of your account", "status_code": 400, "status": "SIGN OUT FAIL"}), 400
 
 @bp.route("/reset-password", methods=["POST"])
+@require_api_key()
 @jwt_required()
 def reset_password():
     jti = get_jwt()["jti"]
@@ -93,7 +96,7 @@ def reset_password():
             "message": "Password reset successfully, please sign in again",
             "user": user
         }), 200
-    return jsonify({'error': 'Invalid data entered'})
+    return jsonify({'message': 'Invalid data entered'}), 400
     
     
 

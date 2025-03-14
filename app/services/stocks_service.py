@@ -5,6 +5,7 @@ from app.models.user_stock_wallet import UserStockWallet
 from ..models.stock_available import AvailableStocks
 from ..models.stock_price import StockPrice
 from ..models.wallet import Wallet, WalletCurrencyType
+from ..utils.enums_utils import ErrorStatuses
 from .. import db
 
 class StocksService:
@@ -33,7 +34,7 @@ class StocksService:
         try:
             stock = StockPrice.query.filter_by(symbol=symbol).first()
             if not stock:
-                raise DataNotFound(f"No stock with symbol {symbol} found")
+                raise DataNotFound(f"No stock with symbol {symbol} found", ErrorStatuses.STOCK_NOT_FOUND.value)
             return stock.to_dict()
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
@@ -42,17 +43,17 @@ class StocksService:
         try:
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
-                raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again")
+                raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
             stock_price = StockPrice.query.filter_by(symbol=symbol).first()
             if not stock_price:
-                raise DataNotFound(f"No price data available for {symbol}")
+                raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
             total_cost = current_price * quantity
             total_cost = float(total_cost)
             
             wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).first()
             if not wallet:
-                raise DataNotFound("We did not find the specified wallet for this user")
+                raise DataNotFound("We did not find the specified wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
             if wallet.balance < total_cost:
                 raise ValueError("Insufficient balance.")
             wallet.balance -= total_cost
@@ -90,19 +91,19 @@ class StocksService:
         try:
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
-                raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again")
+                raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
             stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).first()
             if not stock_wallet or stock_wallet.quantity < quantity:
                 raise ValueError(f"You do not have {quantity} of {stock.company_name} stock")
             stock_price = StockPrice.query.filter_by(symbol=symbol).first()
             if not stock_price:
-                raise DataNotFound(f"No price data available for {symbol}")
+                raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
             total_cost = float(quantity * current_price)
             
             wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).first()
             if not wallet or wallet.currency != WalletCurrencyType.USD:
-                raise DataNotFound("We did not find a USD wallet for this user")
+                raise DataNotFound("We did not find a USD wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
             wallet.balance += total_cost
             stock_wallet.quantity -= quantity
             
@@ -132,7 +133,7 @@ class StocksService:
         try:
             user_stocks = UserStockWallet.query.filter_by(user_id=user_id).all()
             if not user_stocks:
-                raise DataNotFound("No stocks found for this user")
+                raise DataNotFound("No stocks found for this user", ErrorStatuses.STOCK_NOT_FOUND.value)
             return [stock.to_dict() for stock in user_stocks]
         except DataNotFound:
             raise

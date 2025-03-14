@@ -56,9 +56,6 @@ class AuthService:
         except AlreadyExists:
             db.session.rollback()
             raise
-        except IntegrityError:
-            db.session.rollback()
-            raise
         except Exception as e:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
@@ -72,7 +69,7 @@ class AuthService:
                 first_name = first_name,
                 last_name = last_name,
                 email = email,
-                role="admin"
+                role="ADMIN"
             )
             new_user.set_password(password)
             db.session.add(new_user)

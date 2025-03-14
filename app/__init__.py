@@ -2,6 +2,7 @@ from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
+from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 from .error_handlers import register_error_handlers
@@ -63,20 +64,25 @@ def seed_available_stock():
 def create_app():
     load_dotenv()
     app = Flask(__name__)
+
     
     # Connect to Postgresql running in Docker
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI", "postgresql://admin:secret@localhost:5432/myappdb")
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS", "False").lower() == "true"
-    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "SomesuPersecretsUPERrandomstri123456789")
+    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "6")))
     app.config["JWT_BLACKLIST_ENABLED"] = True  # Enable token blacklisting
     app.config["JWT_BLACKLIST_TOKEN_CHECKS"] = ["access", "refresh"]
-    
+
     # Initialize SQLAlchemy
     db.init_app(app)
     
     # Initialize JWT
     jwt.init_app(app)
+    
+    CORS(app)
+    
+
     
     # Import models to ensure they're mapped
     from .models.user import User
@@ -96,11 +102,13 @@ def create_app():
     from .routes.wallet_routes import bp as wallet_bp
     from .routes.transactions_routes import bp as transaction_bp
     from .routes.stocks_route import bp as stocks_bp
+    from .routes.user_routes import bp as user_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(transaction_bp)
     app.register_blueprint(stocks_bp)
+    app.register_blueprint(user_bp)
     
     # Create tables
     with app.app_context():

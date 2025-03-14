@@ -11,6 +11,7 @@ flask-jwt-extended = "*"
 python-dotenv = "*"
 requests = "*"
 websocket-client = "*"
+flask-cors = "*"
 
 [dev-packages]
 

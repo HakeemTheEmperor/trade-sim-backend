@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..services.stocks_service import StocksService
 from ..utils.auth_utils import require_api_key, role_required
 
-bp = Blueprint("stocks", __name__, url_prefix="/stocks")
+bp = Blueprint("stocks", __name__, url_prefix="/api/v1/stocks")
 stocks_service = StocksService()
 
 @bp.route("/all", methods=["GET"])

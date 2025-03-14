@@ -7,7 +7,8 @@ from ..models.wallet import Wallet, WalletCurrencyType
 from ..models.exchangerate import ExchangeRate
 from ..models.transactions import Transaction, TransactionType, TransactionCategory
 from .. import db
-from ..custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, MissingProperties, WalletNotFound
+from ..custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, MissingProperties
+from ..utils.enums_utils import ErrorStatuses
 
 EXCHANGE_RATE_API = os.getenv("EXCHANGE_RATE_API")
 
@@ -51,9 +52,9 @@ class WalletService:
         try:            
             wallets = Wallet.query.filter_by(user_id=user_id).all()
             if not wallets:
-                raise WalletNotFound("We could not find any wallet for this user")
+                raise DataNotFound("We could not find any wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
             return [wallet.to_dict() for wallet in wallets]
-        except WalletNotFound:
+        except DataNotFound:
             raise
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
@@ -62,9 +63,9 @@ class WalletService:
         try:
             wallet = Wallet.query.filter_by(id=wallet_id, user_id = user_id).first()
             if not wallet:
-                raise WalletNotFound()
+                raise DataNotFound("We could not find the wallet specified. Contact support if you think a mistake has been made", ErrorStatuses.WALLET_NOT_FOUND.value)
             return wallet.to_dict()
-        except WalletNotFound:
+        except DataNotFound:
             raise
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
@@ -99,16 +100,18 @@ class WalletService:
             if not wallet_id:
                 raise MissingProperties("You did not provide a wallet Id")
             wallet = Wallet.query.filter_by(id=wallet_id, user_id=user_id).first()
+            print(wallet_id)
+            print(user_id)
             if not wallet:
-                raise WalletNotFound("We could not find the wallet with the specified ID")
-            if wallet.balance > 0:
+                raise DataNotFound("We could not find the wallet with the specified ID", ErrorStatuses.WALLET_NOT_FOUND.value)
+            if wallet.balance > 1:
                 raise ValueError("Cannot delete a wallet with balance in it. Try closing the wallet instead") 
             db.session.delete(wallet)
             db.session.commit()
             return {"message": "Wallet deleted successfully"}
         except MissingProperties:
             raise
-        except WalletNotFound:
+        except DataNotFound:
             raise
         except Exception as e:
             db.session.rollback()
@@ -117,8 +120,8 @@ class WalletService:
     
     def transfer_funds(self, from_wallet_id, to_wallet_id, amount, user_id):
         try:
-            if not amount:
-                raise MissingProperties("You did not enter an amount")
+            if not from_wallet_id or not to_wallet_id or not amount:
+                raise MissingProperties("Missing sender/receiver wallet Id or amount")
             if from_wallet_id == to_wallet_id:
                 raise ValueError("Sender and Receivers wallet id cannot be the same")
             if not from_wallet_id or not to_wallet_id:
@@ -128,9 +131,9 @@ class WalletService:
             to_wallet = Wallet.query.filter_by(id=to_wallet_id).first()
             
             if not from_wallet or not to_wallet:
-                raise DataNotFound("Invalid wallet Id entered. Confirm both the Sender and Receiver's wallet IDs")
+                raise DataNotFound("Invalid wallet Id entered. Confirm both the Sender and Receiver's wallet IDs", ErrorStatuses.WALLET_NOT_FOUND.value)
             if int(from_wallet.user_id) != int(user_id):
-                raise WalletNotFound("We could not find the wallet you entered")
+                raise DataNotFound("We could not find the wallet you entered", ErrorStatuses.WALLET_NOT_FOUND.value)
             # If the sender's wallet balance is less than the amount to be transferred, return error
             if from_wallet.balance < amount:
                 raise InsufficientFunds("Insufficient funds in the source wallet")
@@ -170,8 +173,6 @@ class WalletService:
             db.session.add(receiver_transaction)
             db.session.commit()
             return {"message": "Funds transferred successfully"}
-        except WalletNotFound:
-            raise
         except DataNotFound:
             raise
         except InsufficientFunds:

@@ -4,7 +4,7 @@ from ..services.transactions_service import TransactionsService, TransactionCate
 from ..services.wallet_service import WalletCurrencyType
 from ..utils.auth_utils import require_api_key, role_required
 
-bp = Blueprint("transactions", __name__, url_prefix="/transactions")
+bp = Blueprint("transactions", __name__, url_prefix="/api/v1/transactions")
 transaction_service = TransactionsService()
 
 @bp.route("/history", methods=["GET"])

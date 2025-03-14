@@ -1,0 +1,344 @@
+openapi: 3.0.0
+info:
+  title: Stock Trade Simulator Web API
+  description: Web Api for Stock Trade Simulator
+  version: 1.0.0
+  contact:
+    email: hakeemtheemperor@gmail.com
+    name: HTE
+servers:
+  - url: http://127.0.0.1:5000
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      name: api-key
+      in: header
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserSignUp:
+      type: object
+      properties:
+        first_name:
+          type: string
+          example: Toluwalase
+        last_name:
+          type: string
+          example: Akinyemi
+        email:
+          type: string
+          format: email
+          example: hakeemtheemperor@gmail.com
+        password:
+          type: string
+          format: password
+          example: Password123@
+    InvalidApiKey:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 401
+        message:
+          type: string
+          example: Invalid or missing API key
+        status:
+          type: string
+          example: INVALID API KEY
+    DataNotFound:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 404
+        message:
+          type: string
+          example: The data you were looking for was not found
+        status:
+          type: string
+          example: DATA NOT FOUND
+    AlreadyExists:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 409
+        message:
+          type: string
+          example: The data you are trying to create already exists
+        status:
+          type: string
+          example: DATA ALREADY EXISTS
+    MissingProperties:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 400
+        message:
+          type: string
+          example: Your request could not be processed as certain properties are missing
+        status:
+          type: string
+          example: MISSING REQUIRED PROPERTIES
+    IntegrityError:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 409
+        message:
+          type: string
+          example: Database error, please try again
+        status:
+          type: string
+          example: INTEGRITY ERROR
+    RuntimeError:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 500
+        message:
+          type: string
+          example: "An unexpected error occured: {error}"
+        status:
+          type: string
+          example: RUNTIME ERROR
+    Wallet:
+      type: object
+      properties:
+        balance:
+          type: number
+          format: float
+          example: 100000.0
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:47.015907+00:00"
+        currency:
+          type: string
+          example: "USD"
+        id:
+          type: integer
+          example: 4
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:47.015907+00:00"
+    User:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:46.768393+00:00"
+        email:
+          type: string
+          format: email
+          example: "toluwalas.akinyemi@gmail.com"
+        first_name:
+          type: string
+          example: "Toluwalase"
+        id:
+          type: integer
+          example: 5
+        last_name:
+          type: string
+          example: "Akinyemi"
+        role:
+          type: string
+          example: "USER"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:46.768393+00:00"
+        wallets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Wallet"
+
+tags:
+  - name: Auth
+  - name: Wallets
+  - name: Transactions
+  - name: User
+  - name: Stocks
+
+paths:
+  /auth/signup:
+    post:
+      description: User Signup to the Stock Trade App
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSignUp"
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User created successfully
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Successfully created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The user already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+  /auth/signin:
+    post:
+      description: User Sign-in to the Stock Trade App
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: hakeemtheemperor@gmail.com
+                password:
+                  type: string
+                  format: password
+                  example: Password123@
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Signin Successful
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Successfully signed in
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The user already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /auth/logout:
+    get:
+      description: User sign out and deactivate token
+      tags:
+        - Auth
+      security:
+        - ApiKeyAuth: []
+  /auth/admin-signup:
+    post:
+      description: User Sign-in to the Stock Trade App
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSignUp"
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Signin Successful
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Successfully signed in
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The user already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured

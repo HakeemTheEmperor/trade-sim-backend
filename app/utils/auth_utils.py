@@ -9,8 +9,9 @@ def require_api_key():
         @wraps(f)  # Preserves the original function's metadata (name, docstring, etc.)
         def decorated_function(*args, **kwargs):
             api_key = request.headers.get("X-API-Key")
+            print(api_key)
             if not api_key or api_key != demo_api_key:
-                return jsonify({"error": "Invalid or missing API key"}), 401
+                return jsonify({"message": "Invalid or missing API key", "status_code": 401, "status": "INVALID API KEY"}), 401
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -22,10 +23,14 @@ def role_required(required_role):
         def wrapper(*args, **kwargs):
             claims = get_jwt()
             user_role = claims.get("role")
+            print(user_role)
+            print(required_role)
             
             if user_role != required_role:
                 return jsonify({
-                    "error": "Forbidden: You do not have the required role to access this endpoint"
+                    "message": "Forbidden: You do not have the required role to access this endpoint",
+                    "status_code": 403,
+                    "status": "FORBIDDEN"
                 }), 403
             return f(*args, **kwargs)
         return wrapper

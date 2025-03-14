@@ -1,0 +1,533 @@
+openapi: 3.0.0
+info:
+  title: Trade-Sim
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:5000
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key # This makes it a required header in requests
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+  - name: Auth
+  - name: Wallets
+  - name: Transactions
+  - name: User
+  - name: Stocks
+paths:
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: User-Signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                first_name: Toluwalase
+                last_name: Akinyemi
+                email: toluwalase.akinyemi@gmail.com
+                password: Password123@
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /auth/signin:
+    post:
+      tags:
+        - Auth
+      summary: Admin Signin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                email: hakeemtheemperor@gmail.com
+                password: Passwordadmin@123
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /auth/admin-signup:
+    post:
+      tags:
+        - Auth
+      summary: Admin-Creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                first_name: Toluwalase
+                last_name: Akinyemi
+                email: drake@gmail.com
+                password: Password123@
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /auth/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: Reset Password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                new_password: Password456@
+                old_password: Password123@
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer eyafejk
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /auth/logout:
+    get:
+      tags:
+        - Auth
+      summary: Logout
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            e
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /wallet/all:
+    get:
+      tags:
+        - Wallets
+      summary: Get all wallets
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJh
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /wallet/1:
+    get:
+      tags:
+        - Wallets
+      summary: Get Wallet by Id
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJh
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /wallet/create:
+    post:
+      tags:
+        - Wallets
+      summary: Create Wallet
+      requestBody:
+        content: {}
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJh
+        - name: currency
+          in: query
+          schema:
+            type: string
+          example: EUR
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /wallet/transfer:
+    post:
+      tags:
+        - Wallets
+      summary: Transfer Funds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                from_wallet_id: 1
+                to_wallet_id: 2
+                amount: 3000
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJhbG
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /wallet/delete:
+    post:
+      tags:
+        - Wallets
+      summary: Delete Wallet
+      requestBody:
+        content: {}
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJ
+        - name: wallet_id
+          in: query
+          schema:
+            type: integer
+          example: "3"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /transactions/history:
+    get:
+      tags:
+        - Transactions
+      summary: Get Transactions History for User
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJhbGciOiJIUzI1NiIsI
+        - name: wallet_id
+          in: query
+          schema:
+            type: integer
+          example: "2"
+        - name: currency
+          in: query
+          schema:
+            type: string
+          example: USD
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /users/user/2:
+    get:
+      tags:
+        - User
+      summary: Get User by Id
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJhbGciO
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /stocks/all:
+    get:
+      tags:
+        - Stocks
+      summary: Get All Stocks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            ey
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /stocks/symbol/aapl:
+    get:
+      tags:
+        - Stocks
+      summary: Get Stocks by Symbol
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /stocks/company/uber:
+    get:
+      tags:
+        - Stocks
+      summary: Get Stocks by Company Name
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJhbGciOiJIUz
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /stocks/buy:
+    post:
+      tags:
+        - Stocks
+      summary: Buy Stocks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                symbol: NVDA
+                quantity: 5
+                wallet_id: "1"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJhb
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /stocks/sell:
+    post:
+      tags:
+        - Stocks
+      summary: Sell Stocks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                symbol: NVDA
+                quantity: 3
+                wallet_id: "1"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJhbG
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
+  /stocks/user:
+    get:
+      tags:
+        - Stocks
+      summary: Get All User Stocks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+          example: x-api-key
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          example: >-
+            Bearer
+            eyJh
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json: {}
