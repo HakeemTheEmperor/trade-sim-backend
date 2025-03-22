@@ -12,3 +12,11 @@ class StockHistory(db.Model):
         db.UniqueConstraint('symbol', 'date', name='uix_symbol_date'),
     )
     
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'symbol': self.symbol,
+            'date': self.date,
+            'cp': self.cp
+        }
+    

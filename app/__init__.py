@@ -1,9 +1,12 @@
+import atexit
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 import os
 import threading
 from dotenv import load_dotenv
@@ -124,15 +127,20 @@ def create_app():
     
 
     
-    update_history = UpdateHistory()
     # Create tables
     with app.app_context():
         db.create_all()
         create_admin()
         #DataSeed.load_available_stocks()
-        thread = threading.Thread(target=update_history.update_price_history, daemon=True, args=(app,))
-        thread.start()
-        thread.join()
+        
+        update_history = UpdateHistory()
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=0, second=0), args=[app])
+        
+        # scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0))
+        scheduler.start()
+        scheduler.print_jobs()
+        atexit.register(lambda: scheduler.shutdown())
         
         websocket_listener = WebSocketListener(app)
         websocket_listener.start()

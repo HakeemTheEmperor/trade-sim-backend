@@ -53,7 +53,7 @@ class UpdateHistory:
                     
                     db.session.commit()
                     print(f"Successfully updated the price history for {symbol}")
-                    time.sleep(14)
+                    time.sleep(20)
             except Exception as e:
                 print(e)
                 

@@ -3,6 +3,7 @@ from app.models.transactions import Transaction, TransactionCategory, Transactio
 from app.models.user import User
 from app.models.user_stock_wallet import UserStockWallet
 from ..models.stock_available import AvailableStocks
+from ..models.stock_history import StockHistory
 from ..models.stock_price import StockPrice
 from ..models.wallet import Wallet, WalletCurrencyType
 from ..utils.enums_utils import ErrorStatuses
@@ -47,7 +48,7 @@ class StocksService:
             stock = StockPrice.query.filter_by(symbol=symbol).first()
             if not stock:
                 raise DataNotFound(f"No stock with symbol {symbol} found", ErrorStatuses.STOCK_NOT_FOUND.value)
-            return stock.to_short_list()
+            return stock.to_dict()
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         
@@ -154,5 +155,19 @@ class StocksService:
             raise RuntimeError(f"An unexpected error occurred: {str(e)}")
     
     def get_stock_history(self, symbol):
-        print()
+        try:
+            stock_history = (
+                StockHistory.query
+                .filter_by(symbol=symbol)
+                .order_by(StockHistory.date.asc())
+                .all())
+            
+            if not stock_history:
+                raise DataNotFound("Could not find any price history for this symbol", ErrorStatuses.HISTORY_NOT_FOUND.value)
+            return [history.to_dict() for history in stock_history]
+        except DataNotFound:
+            raise
+        except Exception as e:
+            db.session.rollback()
+            raise RuntimeError(f"An unexpected error occurred: {str(e)}")
                 

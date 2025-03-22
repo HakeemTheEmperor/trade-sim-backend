@@ -13,6 +13,7 @@ requests = "*"
 websocket-client = "*"
 flask-cors = "*"
 flask-swagger-ui = "*"
+apscheduler = "*"
 
 [dev-packages]
 
