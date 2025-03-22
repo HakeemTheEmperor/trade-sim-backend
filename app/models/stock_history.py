@@ -9,6 +9,6 @@ class StockHistory(db.Model):
     cp = db.Column(db.Numeric(10, 4), nullable=False)
     
     __table_args__ = (
-        db.UniqueConstraint('symbol', 'date', name='uix_symbol_date')
+        db.UniqueConstraint('symbol', 'date', name='uix_symbol_date'),
     )
     

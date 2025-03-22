@@ -152,4 +152,7 @@ class StocksService:
         except Exception as e:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occurred: {str(e)}")
+    
+    def get_stock_history(self, symbol):
+        print()
                 

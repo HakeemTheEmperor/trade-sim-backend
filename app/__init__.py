@@ -1,10 +1,11 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
 import os
+import threading
 from dotenv import load_dotenv
 from .error_handlers import register_error_handlers
 from .websocket_listener import WebSocketListener
@@ -98,7 +99,11 @@ def create_app():
     from .models.exchangerate import ExchangeRate
     from .models.stock_available import AvailableStocks
     from .models.stock_price import StockPrice
+    from .models.stock_history import StockHistory
     from .data_seed import DataSeed
+    from .utils.update_history import UpdateHistory
+    
+
     
     # Register Error Handlers
     register_error_handlers(app)
@@ -119,11 +124,16 @@ def create_app():
     
 
     
+    update_history = UpdateHistory()
     # Create tables
     with app.app_context():
         db.create_all()
         create_admin()
-        # DataSeed.load_available_stocks()
+        #DataSeed.load_available_stocks()
+        thread = threading.Thread(target=update_history.update_price_history, daemon=True, args=(app,))
+        thread.start()
+        thread.join()
+        
         websocket_listener = WebSocketListener(app)
         websocket_listener.start()
 
