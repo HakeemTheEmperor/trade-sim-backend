@@ -12,21 +12,33 @@ class StocksService:
     def get_available_stocks(self):
         try:
             stocks = AvailableStocks.query.all()
-            return [stock.to_dict() for stock in stocks]
+            return [stock.to_short_list() for stock in stocks]
+        except Exception as e:
+            raise RuntimeError(f"An unexpected error occured: {str(e)}")
+        
+    def get_stock_by_id(self, id):
+        try:
+            stock = AvailableStocks.query.get(id)
+            if stock:
+                return stock.to_dict()
+            else:
+                raise DataNotFound("Stock not found")
+        except DataNotFound:
+            raise
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         
     def get_stocks_by_symbol(self, symbol):
         try:
             stocks = AvailableStocks.query.filter(AvailableStocks.symbol.ilike(f"%{symbol}%")).all()
-            return [stock.to_dict() for stock in stocks]
+            return [stock.to_short_list() for stock in stocks]
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         
     def get_stocks_by_company_name(self, name):
         try:
             stocks = AvailableStocks.query.filter(AvailableStocks.company_name.ilike(f"%{name}%")).all()
-            return [stock.to_dict() for stock in stocks]
+            return [stock.to_short_list() for stock in stocks]
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         
@@ -35,7 +47,7 @@ class StocksService:
             stock = StockPrice.query.filter_by(symbol=symbol).first()
             if not stock:
                 raise DataNotFound(f"No stock with symbol {symbol} found", ErrorStatuses.STOCK_NOT_FOUND.value)
-            return stock.to_dict()
+            return stock.to_short_list()
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         

@@ -37,6 +37,8 @@ class DataSeed:
                     stock.industry = stock_data.get("industry")
                     stock.image = stock_data.get("image")
                     stock.market_cap = stock_data.get("mktCap")
+                    stock.description = stock_data.get("description")
+                    stock.website = stock_data.get("website")
                 else:
                     stock = AvailableStocks(
                         symbol=symbol,
@@ -44,7 +46,9 @@ class DataSeed:
                         industry=stock_data.get("industry"),
                         market_cap=stock_data.get("mktCap"),
                         sector=stock_data.get("sector"),
-                        image=stock_data.get("image")
+                        image=stock_data.get("image"),
+                        website=stock_data.get("website"),
+                        description=stock_data.get("description")
                     )
                     db.session.add(stock)
                 print(f"Loaded {symbol} - {stock_data.get('companyName')}")

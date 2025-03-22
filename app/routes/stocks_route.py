@@ -29,7 +29,17 @@ def get_stock_by_symbol(symbol):
             "message": "Stocks retrieved successfully",
             "data": result
         }), 200
-    
+
+@bp.route("/id/<id>", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_stock_by_id(id):
+    result = stocks_service.get_stock_by_id(id)
+    return jsonify({
+        "message": "Stock retrieved successfully",
+        "data": result
+    }), 200
+
 @bp.route("/company/<name>", methods=["GET"])
 @require_api_key()
 @jwt_required()
@@ -76,6 +86,8 @@ def sell_stock():
     wallet_id = data.get("wallet_id")
     message = stocks_service.sell_stock(user_id, symbol, wallet_id, quantity)
     return jsonify(message), 200
+
+
 
 @bp.route("/user", methods=["GET"])
 @require_api_key()

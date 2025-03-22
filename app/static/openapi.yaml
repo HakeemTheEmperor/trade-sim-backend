@@ -1,0 +1,867 @@
+openapi: 3.0.0
+info:
+  title: Stock Trade Simulator Web API
+  description: Web Api for Stock Trade Simulator
+  license:
+    name: Apache 2.0
+    url: "https://www.apache.org/licenses/LICENSE-2.0.html"
+  version: 1.0.0
+  contact:
+    email: hakeemtheemperor@gmail.com
+    name: HTE
+servers:
+  - url: http://127.0.0.1:5000/api/v1
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      name: x-api-key
+      in: header
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserSignUp:
+      type: object
+      properties:
+        first_name:
+          type: string
+          example: Toluwalase
+        last_name:
+          type: string
+          example: Akinyemi
+        email:
+          type: string
+          format: email
+          example: hakeemtheemperor@gmail.com
+        password:
+          type: string
+          format: password
+          example: Password123@
+    InvalidApiKey:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 401
+        message:
+          type: string
+          example: Invalid or missing API key or Invalid Token
+        status:
+          type: string
+          example: INVALID API KEY OR INVALID TOKEN
+    DataNotFound:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 404
+        message:
+          type: string
+          example: The data you were looking for was not found
+        status:
+          type: string
+          example: DATA NOT FOUND
+    InsufficientFunds:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 403
+        message:
+          type: string
+          example: Insufficient Funds
+        status:
+          type: string
+          example: INSUFFICIENT FUNDS
+    AlreadyExists:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 409
+        message:
+          type: string
+          example: The data you are trying to create already exists
+        status:
+          type: string
+          example: DATA ALREADY EXISTS
+    MissingProperties:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 400
+        message:
+          type: string
+          example: Your request could not be processed as certain properties are missing
+        status:
+          type: string
+          example: MISSING REQUIRED PROPERTIES
+    RuntimeError:
+      type: object
+      properties:
+        error_code:
+          type: number
+          example: 500
+        message:
+          type: string
+          example: "An unexpected error occured: {error}"
+        status:
+          type: string
+          example: RUNTIME ERROR
+    Wallet:
+      type: object
+      properties:
+        balance:
+          type: number
+          format: float
+          example: 100000.0
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:47.015907+00:00"
+        currency:
+          type: string
+          example: "USD"
+        id:
+          type: integer
+          example: 4
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:47.015907+00:00"
+    User:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:46.768393+00:00"
+        email:
+          type: string
+          format: email
+          example: "toluwalas.akinyemi@gmail.com"
+        first_name:
+          type: string
+          example: "Toluwalase"
+        id:
+          type: integer
+          example: 5
+        last_name:
+          type: string
+          example: "Akinyemi"
+        role:
+          type: string
+          example: "USER"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-03-09T08:23:46.768393+00:00"
+        wallets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Wallet"
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 4
+        user_id:
+          type: integer
+          example: 2
+        currency:
+          type: string
+          example: "USD"
+        from_wallet_id:
+          type: integer
+          nullable: true
+          example: null
+        to_wallet_id:
+          type: integer
+          nullable: true
+          example: 1
+        transaction_type:
+          type: string
+          enum: ["CREDIT", "DEBIT"]
+          example: "CREDIT"
+        transaction_category:
+          type: string
+          example: "WALLET_TRANSFER"
+        total_value:
+          type: number
+          format: double
+          example: 2999.2558
+        price_per_share:
+          type: number
+          format: double
+          nullable: true
+          example: null
+        quantity:
+          type: number
+          format: double
+          nullable: true
+          example: null
+        stock_symbol:
+          type: string
+          nullable: true
+          example: null
+        time:
+          type: string
+          format: date-time
+          example: "2025-03-14T17:59:46.772100+00:00"
+tags:
+  - name: Auth
+    description: Authentication related endpoints
+  - name: Wallets
+    description: Wallet related endpoints
+  - name: Transactions
+    description: Transaction related endpoints
+  - name: User
+    description: User related endpoints
+  - name: Stocks
+    description: Stocks related Endpoints
+
+paths:
+  /auth/signup:
+    post:
+      operationId: authSignupUser
+      summary: User account gets created
+      description: User Signup to the Stock Trade App
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSignUp"
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User created successfully
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Successfully created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The user already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+  /auth/signin:
+    post:
+      operationId: authSigninUser
+      summary: Sign in to the application
+      description: User Sign-in to the Stock Trade App
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: hakeemtheemperor@gmail.com
+                password:
+                  type: string
+                  format: password
+                  example: Password123@
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Signin Successful
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Successfully signed in
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The user already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /auth/logout:
+    get:
+      operationId: authLogoutUser
+      summary: User logs out and deactivate token to prevent reuse
+      description: User sign out and deactivate token
+      tags:
+        - Auth
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: You have successfully logged out of your account
+                  status_code:
+                    type: number
+                    example: 200
+                  status:
+                    type: string
+                    example: SIGN OUT SUCCESS
+          description: Successfully signed out the user
+        "400":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: We were unable to log you out of your account
+                  status_code:
+                    type: number
+                    example: 400
+                  status:
+                    type: string
+                    example: SIGN OUT FAIL
+          description: Unable to sign out user
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+  /auth/admin-signup:
+    post:
+      operationId: adminAccountCreation
+      summary: Creates account for admin
+      description: Account creation for admin
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSignUp"
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Signin Successful
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Successfully signed in
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The user already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+  /auth/reset-password:
+    post:
+      operationId: authResetPassword
+      summary: Reset password
+      description: Password Change
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                old_password:
+                  type: string
+                  format: password
+                  example: Password123@
+                new_password:
+                  type: string
+                  format: password
+                  example: PasswordNew123@
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password reset successfully, please sign in again
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: Password Reset successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Invalid Data Entered
+          description: Unexpected error occured
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /wallet/all:
+    get:
+      operationId: walletAllUsers
+      summary: Get user wallets
+      description: Get all wallets belonging to the User
+      tags:
+        - Wallets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Wallets retrieved successfully
+                  wallets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Wallet"
+          description: User has wallets and they've been retrieved successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataNotFound"
+          description: Wallet Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /wallet/{id}:
+    get:
+      operationId: walletById
+      summary: Get the particular wallet
+      description: Get the wallet with the specified Id
+      tags:
+        - Wallets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: The Id of the wallet to retrieve
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Wallet retrieved successfully
+                  wallet:
+                    $ref: "#/components/schemas/Wallet"
+          description: Wallet retrieved succesfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataNotFound"
+          description: Wallet Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /wallet/create:
+    post:
+      operationId: walletCreate
+      summary: Create a new wallet
+      description: Creates a new wallet for the authenticated user.
+      tags:
+        - Wallets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The currency of the wallet (e.g., "USD", "NGN").
+      responses:
+        201:
+          description: Wallet created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Wallet created Successfully
+                  wallet:
+                    $ref: "#/components/schemas/Wallet"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered or Invalid Token
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The wallet already exists
+        500:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /wallet/transfer:
+    post:
+      operationId: walletTransferFunds
+      summary: Transfer funds between wallets
+      description: Transfers funds from one wallet to another for the authenticated user.
+      tags:
+        - Wallets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - from_wallet_id
+                - to_wallet_id
+                - amount
+              properties:
+                from_wallet_id:
+                  type: integer
+                  description: The ID of the wallet to transfer funds from.
+                  example: 1
+                to_wallet_id:
+                  type: integer
+                  description: The ID of the wallet to transfer funds to.
+                  example: 2
+                amount:
+                  type: number
+                  format: float
+                  description: The amount to transfer.
+                  example: 100.50
+      responses:
+        200:
+          description: Transfer Successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Funds transferred successfully
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered or Invalid Token
+        403:
+          description: Insufficient Funds for transfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsufficientFunds"
+        500:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /wallet/delete:
+    delete:
+      operationId: walletDeleteById
+      summary: Delete selected wallet
+      description: Delete the user wallet.
+      tags:
+        - Wallets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: wallet_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: The ID of the wallet to be deleted.
+      responses:
+        200:
+          description: Wallet deleted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Wallet deleted Successfully
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered or Invalid Token
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataNotFound"
+          description: Wallet Not Found
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyExists"
+          description: The wallet already exists
+        500:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /transactions/history:
+    get:
+      operationId: transactionsHistoryUser
+      summary: Get user transaction history
+      description: Retrieves the transaction history for a user's wallet, with optional filtering and pagination.
+      tags:
+        - Transactions
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: wallet_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: The ID of the wallet to filter transactions.
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter transactions by currency.
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter transactions by category.
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Sort transactions by a specified field.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: The page number for pagination.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Number of transactions per page.
+      responses:
+        200:
+          description: Transaction history retrieved successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transaction history gotten successfully"
+                  page:
+                    type: integer
+                    example: 1
+                  pages:
+                    type: integer
+                    example: 1
+                  per_page:
+                    type: integer
+                    example: 10
+                  total:
+                    type: integer
+                    example: 2
+                  transactions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Transaction"
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The request is missing some required properties
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvalidApiKey"
+          description: Invalid Api Key entered or Invalid Token
+        500:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured

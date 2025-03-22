@@ -12,6 +12,7 @@ python-dotenv = "*"
 requests = "*"
 websocket-client = "*"
 flask-cors = "*"
+flask-swagger-ui = "*"
 
 [dev-packages]
 

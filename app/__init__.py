@@ -1,8 +1,9 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from flask_cors import CORS
+from flask_swagger_ui import get_swaggerui_blueprint
 import os
 from dotenv import load_dotenv
 from .error_handlers import register_error_handlers
@@ -64,6 +65,11 @@ def seed_available_stock():
 def create_app():
     load_dotenv()
     app = Flask(__name__)
+    
+    SWAGGER_URL = os.getenv("SWAGGER_URL")
+    API_URL = os.getenv("API_URL")
+    
+    swaggerui_blueprint = get_swaggerui_blueprint(SWAGGER_URL, API_URL, config={"app_name": "Stock Trade Simulator Web Api"})
 
     
     # Connect to Postgresql running in Docker
@@ -109,6 +115,9 @@ def create_app():
     app.register_blueprint(transaction_bp)
     app.register_blueprint(stocks_bp)
     app.register_blueprint(user_bp)
+    app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+    
+
     
     # Create tables
     with app.app_context():
