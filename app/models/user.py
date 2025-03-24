@@ -11,8 +11,10 @@ class User(db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(100), nullable=False)
+    username = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
+    
     password_hash = db.Column(db.String(255), nullable=False) 
     created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
@@ -34,6 +36,7 @@ class User(db.Model):
             "id": self.id,
             "first_name": self.first_name,
             "last_name": self.last_name,
+            "username": self.username,
             "email": self.email,
             "role": self.role.value,
             "created_at": self.created_at.isoformat(),

@@ -12,6 +12,7 @@ auth_service = AuthService()
 @role_required('SUPERADMIN')
 def admin_create():
     data = request.get_json()
+    required_fields = ["first_name", "last_name", "email", "password", "username"]
     if not data or not all(key in data for key in ["first_name", "last_name", "email", "password"]):
         return jsonify({"error": "Missing required fields (first_name, last_name, email, password)"}), 400
     
@@ -27,15 +28,20 @@ def admin_create():
 @require_api_key()
 def user_signup():
     data = request.get_json()
-    if not data or not all(key in data for key in ["first_name", "last_name", "email", "password"]):
-        return jsonify({"error": "Missing required fields (first_name, last_name, email, password)"}), 400
+    required_fields = ["first_name", "last_name", "email", "password", "username"]
+    if not data or not all(key in data and data[key].strip() for key in required_fields):
+        return jsonify({"error": "Missing or invalid required fields (first_name, last_name, email, password, username)"}), 400
+
+    # Strip extra whitespaces from all values
+    cleaned_data = {key: data[key].strip() for key in required_fields}
     
     try:
         new_user = auth_service.create_user(
-            first_name=data["first_name"],
-            last_name=data["last_name"],
-            email=data["email"],
-            password=data["password"]
+            first_name=cleaned_data["first_name"],
+            last_name=cleaned_data["last_name"],
+            email=cleaned_data["email"],
+            password=cleaned_data["password"],
+            username=cleaned_data["username"]
         )
         access_token = auth_service.generate_token(new_user)
         return jsonify({
@@ -49,17 +55,21 @@ def user_signup():
 @require_api_key()
 def signin():
     data = request.get_json()
-    if not data or not all(key in data for key in ['email', 'password']):
-        return jsonify({"error": "Missing required fields (email, password)"}), 400
     
-    user = auth_service.authenticate_user(data['email'], data['password'])
+    required_fields = ['email', 'password']
+    if not data or not all(key in data and data[key].strip() for key in required_fields):
+        return jsonify({"error": "Missing or invalid required fields (email, password)"}), 400
+    
+    cleaned_data = {key: data[key].strip() for key in required_fields}
+    
+    user = auth_service.authenticate_user(cleaned_data['email'], cleaned_data['password'])
     if user:
         access_token = auth_service.generate_token(user)
         return jsonify({
             "message": "Sign-in successful",
             "token": access_token,
             "user": user.to_dict()}), 200
-    return jsonify({'error': 'Invalid email or password'}), 401
+    return jsonify({'message': 'Invalid email or password'}), 401
 
 @bp.route("/debug-token", methods=["GET"])
 @jwt_required()

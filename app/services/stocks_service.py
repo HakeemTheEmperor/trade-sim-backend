@@ -144,10 +144,26 @@ class StocksService:
             
     def get_all_user_stocks(self, user_id):
         try:
-            user_stocks = UserStockWallet.query.filter_by(user_id=user_id).all()
+            user_stocks = (
+                db.session.query(UserStockWallet, AvailableStocks)
+                .join(AvailableStocks, UserStockWallet.symbol == AvailableStocks.symbol)
+                .filter(UserStockWallet.user_id == user_id)
+                .all()
+                )
             if not user_stocks:
                 raise DataNotFound("No stocks found for this user", ErrorStatuses.STOCK_NOT_FOUND.value)
-            return [stock.to_dict() for stock in user_stocks]
+            result = []
+            for user_stock, available_stock in user_stocks:
+                combined_dict = {
+                    'id': user_stock.id,
+                    'symbol': user_stock.symbol,
+                    'quantity': user_stock.quantity,
+                    'company_name': available_stock.company_name,
+                    'image': available_stock.image,
+                    'price': available_stock.price.to_dict() if available_stock.price else None,
+                }
+                result.append(combined_dict)
+            return result
         except DataNotFound:
             raise
         except Exception as e:

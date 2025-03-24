@@ -24,7 +24,7 @@ class AuthService:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
     
-    def create_user(self, first_name, last_name, email, password):
+    def create_user(self, first_name, last_name, email, password, username):
         # Check if email already exists
         try:
             if not first_name or not last_name or not email or not password:
@@ -36,6 +36,7 @@ class AuthService:
             new_user = User(
                 first_name = first_name,
                 last_name = last_name,
+                username=username,
                 email = email,
             )
             new_user.set_password(password)
