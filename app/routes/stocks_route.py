@@ -18,11 +18,23 @@ def get_all_stocks():
             "data": stocks
         }), 200
     
+@bp.route("/search/symbol/<symbol>", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def search_stock_by_symbol(symbol):
+    result = stocks_service.search_stocks_by_symbol(symbol)
+    if not result:
+        return jsonify({"message": "Stock not found", "stocks": []}), 404
+    return jsonify({
+            "message": "Stocks retrieved successfully",
+            "data": result
+        }), 200
+    
 @bp.route("/symbol/<symbol>", methods=["GET"])
 @require_api_key()
 @jwt_required()
 def get_stock_by_symbol(symbol):
-    result = stocks_service.get_stocks_by_symbol(symbol)
+    result = stocks_service.get_stock_by_exact_symbol(symbol)
     if not result:
         return jsonify({"message": "Stock not found", "stocks": []}), 404
     return jsonify({
@@ -40,7 +52,7 @@ def get_stock_by_id(id):
         "data": result
     }), 200
 
-@bp.route("/company/<name>", methods=["GET"])
+@bp.route("/search/company/<name>", methods=["GET"])
 @require_api_key()
 @jwt_required()
 def get_stocks_by_company_name(name):
@@ -96,6 +108,14 @@ def get_all_user_stocks():
     result = stocks_service.get_all_user_stocks(user_id)
     return jsonify({"message": "Stocks retrieved successfully", "data": result}), 200
 
+@bp.route("/user/quantity/<symbol>", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_user_stock_quantity(symbol):
+    user_id = get_jwt_identity()
+    result = stocks_service.get_user_stock_quantity(user_id, symbol)
+    return jsonify({"message": "Stocks retrieved successfully", "data": result}), 200
+
 @bp.route("/stock/history/<symbol>", methods=["GET"])
 @require_api_key()
 def get_stock_history(symbol):
@@ -103,3 +123,15 @@ def get_stock_history(symbol):
     return jsonify({
         "message": "Successfully retrieved stocks", "data": result
     }), 200
+
+
+@bp.route("/portfolio", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_user_portfolio():
+    user_id = get_jwt_identity()
+    result = stocks_service.get_user_portfolio(user_id)
+    return jsonify({
+        "message": "Successfully retrieved stocks", "data": result
+    }), 200
+

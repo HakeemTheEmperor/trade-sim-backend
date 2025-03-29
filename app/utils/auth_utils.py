@@ -9,7 +9,6 @@ def require_api_key():
         @wraps(f)  # Preserves the original function's metadata (name, docstring, etc.)
         def decorated_function(*args, **kwargs):
             api_key = request.headers.get("X-API-Key")
-            print(api_key)
             if not api_key or api_key != demo_api_key:
                 return jsonify({"message": "Invalid or missing API key", "status_code": 401, "status": "INVALID API KEY"}), 401
             return f(*args, **kwargs)

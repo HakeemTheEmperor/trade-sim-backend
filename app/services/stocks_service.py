@@ -1,3 +1,4 @@
+from decimal import Decimal
 from app.custom_exceptions import DataNotFound
 from app.models.transactions import Transaction, TransactionCategory, TransactionType
 from app.models.user import User
@@ -29,12 +30,21 @@ class StocksService:
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         
-    def get_stocks_by_symbol(self, symbol):
+    def search_stocks_by_symbol(self, symbol):
         try:
             stocks = AvailableStocks.query.filter(AvailableStocks.symbol.ilike(f"%{symbol}%")).all()
             return [stock.to_short_list() for stock in stocks]
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
+        
+    def get_stock_by_exact_symbol(self, symbol):
+        try:
+            symbol = symbol.upper()
+            stock = AvailableStocks.query.filter(AvailableStocks.symbol == symbol).first()
+            return stock.to_dict() if stock else None
+        except Exception as e:
+            raise RuntimeError(f"An unexpected error occurred: {str(e)}")
+
         
     def get_stocks_by_company_name(self, name):
         try:
@@ -54,6 +64,7 @@ class StocksService:
         
     def buy_stocks(self, user_id, symbol, wallet_id, quantity):
         try:
+            symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
                 raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
@@ -107,7 +118,7 @@ class StocksService:
                 raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
             stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).first()
             if not stock_wallet or stock_wallet.quantity < quantity:
-                raise ValueError(f"You do not have {quantity} of {stock.company_name} stock")
+                raise ValueError(f"You do not have {quantity} units of {stock.company_name} stock")
             stock_price = StockPrice.query.filter_by(symbol=symbol).first()
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
@@ -170,6 +181,23 @@ class StocksService:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occurred: {str(e)}")
     
+    def get_user_stock_quantity(self, user_id, symbol):
+        try:
+            symbol = symbol.strip().upper()
+            stock = (
+                db.session.query(UserStockWallet.quantity)
+                .filter(UserStockWallet.user_id == user_id, UserStockWallet.symbol == symbol)
+                .first()
+            )
+            if not stock:
+                raise DataNotFound("Stock not found for this user", ErrorStatuses.STOCK_NOT_FOUND.value)
+            return float(stock.quantity)
+        except DataNotFound:
+            raise
+        except Exception as e:
+            db.session.rollback()
+            raise RuntimeError(f"An unexpected error occurred: {str(e)}")
+    
     def get_stock_history(self, symbol):
         try:
             stock_history = (
@@ -186,4 +214,60 @@ class StocksService:
         except Exception as e:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occurred: {str(e)}")
+        
+    def get_user_portfolio(self, user_id):
+        try:
+            user_stocks = UserStockWallet.query.filter_by(user_id=user_id).all()
+            if not user_stocks:
+                return {
+                "portfolio_value": 0,
+                "profit_loss_percentage": 0
+                }
+            total_cost = 0
+            current_value = 0
+            
+            for stock in user_stocks:
+                stock_price = StockPrice.query.filter_by(symbol=stock.symbol).first()
+                if not stock_price:
+                    continue
                 
+                current_price = stock_price.current_price
+                current_value += stock.quantity * current_price
+                
+                buy_transactions = Transaction.query.filter_by(
+                    user_id=user_id, 
+                    stock_symbol=stock.symbol,
+                    transaction_type=TransactionType.BUY
+                ).all()
+                
+                sell_transactions = Transaction.query.filter_by(
+                    user_id=user_id, 
+                    stock_symbol=stock.symbol,
+                    transaction_type=TransactionType.SELL
+                ).all()
+                
+                
+                total_bought = sum(tx.quantity for tx in buy_transactions)
+                total_sold = sum(tx.quantity for tx in sell_transactions)
+                net_quantity = total_bought - total_sold
+                
+                if net_quantity > 0:
+                    total_buy_cost = sum(tx.quantity * tx.price_per_share for tx in buy_transactions)
+                    avg_buy_price = total_buy_cost / total_bought 
+                    total_cost += avg_buy_price * net_quantity
+            if total_cost == 0:
+                profit_loss_percentage = 0
+            else:
+                print("Got here")
+                print(type(current_value))
+                print(type(total_cost))
+                profit_loss_percentage = ((current_value - Decimal(total_cost)) / Decimal(total_cost)) * 100
+                
+            return {
+                "portfolio_value": current_value,
+                "profit_loss_percentage": profit_loss_percentage
+            }
+        except Exception as e:
+            print(e)
+            db.session.rollback()
+            raise RuntimeError(f"An unexpected error occured: {str(e)}")
