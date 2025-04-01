@@ -6,6 +6,12 @@ class MissingProperties(CustomError):
         self.message = message
         self.status = status
         super().__init__(self.message)
+
+class LimitReached(CustomError):
+    def __init__(self, message="You have reached the maximum number of slots allotted", status="MAXIMUM LIMIT REACHED"):
+        self.message = message
+        self.status = status
+        super().__init__(self.message)
         
 class WalletNotFound(CustomError):
     def __init__(self, message="We could not find the wallet specified. Contact support if you think a mistake has been made"):

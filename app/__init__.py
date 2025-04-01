@@ -104,6 +104,7 @@ def create_app():
     from .models.stock_available import AvailableStocks
     from .models.stock_price import StockPrice
     from .models.stock_history import StockHistory
+    from .models.watch_list import WatchList
     from .data_seed import DataSeed
     from .utils.update_history import UpdateHistory
     
@@ -118,12 +119,14 @@ def create_app():
     from .routes.transactions_routes import bp as transaction_bp
     from .routes.stocks_route import bp as stocks_bp
     from .routes.user_routes import bp as user_bp
+    from .routes.watchlist_routes import bp as watchlist_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(transaction_bp)
     app.register_blueprint(stocks_bp)
     app.register_blueprint(user_bp)
+    app.register_blueprint(watchlist_bp)
     app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
     
 
@@ -136,8 +139,8 @@ def create_app():
         
         update_history = UpdateHistory()
         scheduler = BackgroundScheduler()
-        scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=7, minute=22, second=0), args=[app])
-        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=7, minute=25, second=0), args=[app])
+        scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=3, minute=0, second=0), args=[app])
+        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=3, minute=5, second=0), args=[app])
         scheduler.start()
         scheduler.print_jobs()
         atexit.register(lambda: scheduler.shutdown())

@@ -1,6 +1,6 @@
 from flask import jsonify
 from sqlalchemy.exc import IntegrityError
-from .custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, MissingProperties, WalletNotFound
+from .custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, LimitReached, MissingProperties, WalletNotFound
 
 def register_error_handlers(app):
     @app.errorhandler(ValueError)
@@ -40,6 +40,14 @@ def register_error_handlers(app):
             'status': e.status,
             'error_code': 400
         }), 400
+    
+    @app.errorhandler(LimitReached)
+    def handle_limit_reached_error(e):
+        return jsonify({
+            'message': str(e),
+            'status': e.status,
+            'error_code': 400
+        }), 403
         
     @app.errorhandler(WalletNotFound)
     def handle_wallet_not_found_error(e):

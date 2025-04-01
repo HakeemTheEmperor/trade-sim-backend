@@ -78,7 +78,7 @@ def debug_token():
     user_id = get_jwt_identity()
     return jsonify({"user_id": user_id, "claims": claims})
 
-@bp.route("/logout", methods=["GET"])
+@bp.route("/logout", methods=["POST"])
 @require_api_key()
 @jwt_required()
 def logout():

@@ -1,4 +1,6 @@
 from decimal import Decimal
+
+from sqlalchemy import asc, desc
 from app.custom_exceptions import DataNotFound
 from app.models.transactions import Transaction, TransactionCategory, TransactionType
 from app.models.user import User
@@ -11,12 +13,37 @@ from ..utils.enums_utils import ErrorStatuses
 from .. import db
 
 class StocksService:
-    def get_available_stocks(self):
+    def get_available_stocks(self, page=1, rows=10, sort_by='symbol', sort='asc'):
+        page = int(page) if isinstance(page, (str, int)) else 1
+        rows = int(rows) if isinstance(rows, (str, int)) else 10
+        sort = sort.lower() if isinstance(sort, str) else 'asc'
+        sort_by = sort_by.lower() if isinstance(sort_by, str) else 'symbol'
+        
         try:
-            stocks = AvailableStocks.query.all()
-            return [stock.to_short_list() for stock in stocks]
+            query = AvailableStocks.query
+            
+            if sort_by=="price":
+                query = query.join(StockPrice)
+                order_column = StockPrice.current_price
+            else:
+                order_column = AvailableStocks.symbol
+            
+            order = desc(order_column) if sort=="desc" else asc(order_column)
+            query = query.order_by(order)
+            
+            paginated_result = query.paginate(page=page, per_page=rows, error_out=False)
+            return {
+                "message": "Available stocks retrieved successfully",
+                "data": {
+                    "stocks": [stock.to_short_list() for stock in paginated_result.items],
+                    "total": paginated_result.total,
+                    "page": paginated_result.page,
+                    "per_page": paginated_result.per_page,
+                    "pages": paginated_result.pages
+                }
+            }
         except Exception as e:
-            raise RuntimeError(f"An unexpected error occured: {str(e)}")
+            raise RuntimeError(f"An unexpected error occurred: {str(e)}")
         
     def get_stock_by_id(self, id):
         try:
@@ -258,9 +285,6 @@ class StocksService:
             if total_cost == 0:
                 profit_loss_percentage = 0
             else:
-                print("Got here")
-                print(type(current_value))
-                print(type(total_cost))
                 profit_loss_percentage = ((current_value - Decimal(total_cost)) / Decimal(total_cost)) * 100
                 
             return {

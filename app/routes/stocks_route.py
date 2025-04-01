@@ -10,13 +10,14 @@ stocks_service = StocksService()
 @require_api_key()
 @jwt_required()
 def get_all_stocks():
-    stocks = stocks_service.get_available_stocks()
+    sort_by = request.args.get("sort_by")
+    sort = request.args.get("sort")
+    page = request.args.get("page")
+    rows = request.args.get("limit")
+    stocks = stocks_service.get_available_stocks(page, rows,sort_by, sort)
     if not stocks:
         return jsonify({"error": "No available stocks"}), 404
-    return jsonify({
-            "message": "Stocks retrieved successfully",
-            "data": stocks
-        }), 200
+    return jsonify(stocks), 200
     
 @bp.route("/search/symbol/<symbol>", methods=["GET"])
 @require_api_key()

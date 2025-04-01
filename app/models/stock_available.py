@@ -12,8 +12,6 @@ class AvailableStocks(db.Model):
     image = db.Column(db.String(255), nullable=False)
     website = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    
-    
     # Relationship to StockPrice
     price = db.relationship('StockPrice', backref='available_stock', uselist=False, lazy='joined')
     
