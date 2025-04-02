@@ -19,7 +19,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
     role = db.Column(db.Enum(UserRoles), default=UserRoles.USER, nullable=False)
-    phone_number = db.Column(db.String(20), nullable=True)
+    phone_number = db.Column(db.String(30), nullable=True)
     
     # Relationship (One user -> Many transactions)
     transactions = db.relationship("Transaction", backref="user", lazy=True)

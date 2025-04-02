@@ -139,8 +139,8 @@ def create_app():
         
         update_history = UpdateHistory()
         scheduler = BackgroundScheduler()
-        scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=3, minute=0, second=0), args=[app])
-        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=3, minute=5, second=0), args=[app])
+        scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=15, minute=51, second=0), args=[app])
+        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=15, minute=53, second=0), args=[app])
         scheduler.start()
         scheduler.print_jobs()
         atexit.register(lambda: scheduler.shutdown())
