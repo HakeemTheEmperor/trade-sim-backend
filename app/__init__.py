@@ -142,7 +142,6 @@ def create_app():
         scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
         scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
         scheduler.start()
-        scheduler.print_jobs()
         atexit.register(lambda: scheduler.shutdown())
         
         websocket_listener = WebSocketListener(app)
