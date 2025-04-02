@@ -13,3 +13,21 @@ user_service = UserService()
 def get_all_users():
     users = user_service.get_all_users()
     return jsonify({"message": "Users retrieved successfully", "data": users})
+
+@bp.route("/user", methods=["GET"])
+@require_api_key()
+@jwt_required()
+def get_user():
+    user_id = get_jwt_identity()
+    user = user_service.get_user_by_id(user_id)
+    return jsonify({"message": "User retrieved successfully", "data": user})
+
+
+@bp.route('/user/edit', methods=['POST'])
+@require_api_key()
+@jwt_required()
+def edit_user_info():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    response = user_service.update_user_data(user_id, data)
+    return jsonify(response), 200
