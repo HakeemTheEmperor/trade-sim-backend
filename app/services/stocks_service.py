@@ -158,6 +158,9 @@ class StocksService:
             wallet.balance += total_cost
             stock_wallet.quantity -= quantity
             
+            if stock_wallet.quantity == 0:
+                db.session.delete(stock_wallet)
+            
             transaction_log = Transaction(
                 user_id=user_id,
                 from_wallet_id=wallet_id,
