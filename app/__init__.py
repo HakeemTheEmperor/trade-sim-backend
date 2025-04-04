@@ -141,7 +141,7 @@ def create_app():
         scheduler.start()
         atexit.register(lambda: scheduler.shutdown())
         
-        #websocket_listener = WebSocketListener(app)
-        #websocket_listener.start()
+        websocket_listener = WebSocketListener(app)
+        websocket_listener.start()
 
     return app
