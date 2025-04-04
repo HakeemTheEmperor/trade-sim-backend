@@ -19,7 +19,6 @@ services:
     depends_on:
       - db
     environment:
-      - DATABASE_URL=postgresql://admin:secret@db:5432/myappdb
       - FLASK_ENV=development # Optional: ensures Flask runs in development mode
     volumes:
       - .:/app
