@@ -8,7 +8,7 @@ The Trade Simulator API is a simple application built to simulate stock trading 
 
 To run this application, you need to have the following installed on your system:
 
-- Docker: Ensure Docker is installed and running. You can download if from [Docer's official website](https://www.docker.com/get-started/) and follow the installation instructions for your operating system.
+- Docker: Ensure Docker is installed and running. You can download if from [Docker's official website](https://www.docker.com/get-started/) and follow the installation instructions for your operating system.
 - Docker Compose: Docker Compose is typically included with Docker Desktop (for Windows and macOS). If you’re on Linux, you may need to install it separately—[see the Docker Compose installation guide](https://docs.docker.com/compose/install/).
 
 ### Optional: Local Development Without Docker
@@ -42,12 +42,22 @@ cd stock-trade-sims
 ```
 
 2. Build and Run the Application:
+
    - Use Docker Compose to build and start the application and its PostgreSQL database:
+
    ```bash
    docker-compose up --build
    ```
 
-To install python, click [here](https://www.python.org/downloads/) and follow the instructions for your operating system
+   - This command will start the containers and make the API available at http://localhost:5000
+
+3. Shut Down the Application:
+
+   - To stop the containers and remove them, along with the associated volumes (e.g., the PostgreSQL data volume), run:
+
+   ```bash
+   docker-compose up --build
+   ```
 
 Confirm you have installed python by running:
 
