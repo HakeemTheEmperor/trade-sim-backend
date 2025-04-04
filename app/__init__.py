@@ -91,10 +91,7 @@ def create_app():
     # Initialize JWT
     jwt.init_app(app)
     
-    CORS(app)
-    
-
-    
+    CORS(app, resources={r"/*": {"origins": "*"}})
     # Import models to ensure they're mapped
     from .models.user import User
     from .models.transactions import Transaction

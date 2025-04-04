@@ -103,8 +103,7 @@ def reset_password():
     logged_out = auth_service.logout(jti)
     if user and logged_out:
         return jsonify({
-            "message": "Password reset successfully, please sign in again",
-            "user": user
+            "message": "Password reset successfully, please sign in again"
         }), 200
     return jsonify({'message': 'Invalid data entered'}), 400
     

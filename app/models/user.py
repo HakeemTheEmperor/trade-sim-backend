@@ -42,5 +42,6 @@ class User(db.Model):
             "role": self.role.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+            "phone_number": self.phone_number,
             'wallets': [wallet.to_dict() for wallet in self.wallets]
         }# Include other fields as needed
