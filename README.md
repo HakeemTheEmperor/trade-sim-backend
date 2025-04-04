@@ -56,53 +56,8 @@ cd stock-trade-sims
    - To stop the containers and remove them, along with the associated volumes (e.g., the PostgreSQL data volume), run:
 
    ```bash
-   docker-compose up --build
+   docker-compose down -v
    ```
-
-Confirm you have installed python by running:
-
-```bash
-python --version
-```
-
-Additionally, confirm you have installed pip by running:
-
-```bash
-pip --version
-```
-
-To install pipenv, run:
-
-```bash
-pip install pipenv --user
-```
-
-After installing pipenv, run:
-
-```bash
-pipenv install
-```
-
-to install the packages and dependencies required for the application
-Activate the shell by running:
-
-```bash
-pipenv shell
-```
-
-## DOCKER AND RUN IT
-
-To build the app and run it:
-
-```bash
-docker-compose up --build
-```
-
-To shut it down and delete the volumes, run:
-
-```bash
-docker-compose down -v
-```
 
 ## DEVELOPMENT DETAILS
 
