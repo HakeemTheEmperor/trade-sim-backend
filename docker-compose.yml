@@ -14,7 +14,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    image: trade-sim-api:v1
+    image: trade-sim-api:v2
     container_name: trade-sim-api
     ports:
       - "5000:5000" # Maps Flask's default port to your host
@@ -22,8 +22,10 @@ services:
     #   - db
     environment:
       - FLASK_ENV=development # Optional: ensures Flask runs in development mode
-    # volumes:
-    #   - .:/app
+      # - FLASK_APP=app.index
+    env_file:
+      - ./ops/dev.env
+    # working_dir: /app
 
 # volumes:
   # pgdata: # Named volume for data persistence

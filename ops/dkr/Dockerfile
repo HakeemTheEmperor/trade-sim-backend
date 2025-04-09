@@ -17,17 +17,17 @@ RUN pip install --upgrade pip && pip install pipenv
 COPY Pipfile Pipfile.lock ./
 
 # Install dependencies using pipenv
-RUN pipenv install --deploy --system
+RUN pipenv install --deploy
 
 # Make the bootstrap.sh script executable
 COPY bootstrap.sh ./
 RUN chmod +x ./bootstrap.sh
 
 # Copy the rest of the application code to the container
-COPY ./app ./
+COPY ./app ./app
 
 # Expose the port Flask runs on
 EXPOSE 5000
 
 # Define the command to run your app
-CMD ["/app/bootstrap.sh"]
+CMD ["pipenv", "run", "./bootstrap.sh"]

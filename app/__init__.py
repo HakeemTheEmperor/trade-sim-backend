@@ -132,9 +132,11 @@ def create_app():
     with app.app_context():
         db.create_all()
         create_admin()
-        #DataSeed.load_available_stocks()
         
         update_history = UpdateHistory()
+        #DataSeed.load_available_stocks(app)
+        #update_history.update_price_history(app)
+        
         scheduler = BackgroundScheduler()
         scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
         scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
