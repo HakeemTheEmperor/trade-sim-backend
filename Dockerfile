@@ -17,7 +17,7 @@ RUN pip install --upgrade pip && pip install pipenv
 COPY Pipfile Pipfile.lock ./
 
 # Install dependencies using pipenv
-RUN pipenv install --deploy --system
+RUN pipenv install --deploy
 
 # Copy the rest of the application code to the container
 COPY . .
@@ -29,4 +29,4 @@ RUN chmod +x ./bootstrap.sh
 EXPOSE 5000
 
 # Define the command to run your app
-CMD ["./bootstrap.sh"]
+CMD ["pipenv", "run", "./bootstrap.sh"]

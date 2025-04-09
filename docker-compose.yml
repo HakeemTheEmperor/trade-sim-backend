@@ -20,8 +20,10 @@ services:
       - db
     environment:
       - FLASK_ENV=development # Optional: ensures Flask runs in development mode
-    volumes:
-      - .:/app
+      - FLASK_APP=app.index
+    env_file:
+      - .env
+    working_dir: /app
 
 volumes:
   pgdata: # Named volume for data persistence
