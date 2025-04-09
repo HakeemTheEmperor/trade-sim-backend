@@ -1,27 +1,29 @@
 services:
-  db:
-    image: postgres:latest
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: myappdb
-    ports:
-      - "5432:5432" # Maps PostgreSQL port to your host
-    volumes:
-      - pgdata:/var/lib/postgresql/data # Persists data
+  # db:
+  #   image: postgres:latest
+  #   environment:
+  #     POSTGRES_USER: admin
+  #     POSTGRES_PASSWORD: secret
+  #     POSTGRES_DB: myappdb
+  #   ports:
+  #     - "5432:5432" # Maps PostgreSQL port to your host
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data # Persists data
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: trade-sim-api:v1
+    container_name: trade-sim-api
     ports:
       - "5000:5000" # Maps Flask's default port to your host
-    depends_on:
-      - db
+    # depends_on:
+    #   - db
     environment:
       - FLASK_ENV=development # Optional: ensures Flask runs in development mode
-    volumes:
-      - .:/app
+    # volumes:
+    #   - .:/app
 
-volumes:
-  pgdata: # Named volume for data persistence
+# volumes:
+  # pgdata: # Named volume for data persistence
