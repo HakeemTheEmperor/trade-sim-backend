@@ -20,9 +20,10 @@ COPY Pipfile Pipfile.lock ./
 RUN pipenv install --deploy --system
 
 # Copy the rest of the application code to the container
-COPY . .
+COPY ./app .
 
 # Make the bootstrap.sh script executable
+COPY bootstrap.sh ./
 RUN chmod +x ./bootstrap.sh
 
 # Expose the port Flask runs on
