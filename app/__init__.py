@@ -91,7 +91,8 @@ def create_app():
     # Initialize JWT
     jwt.init_app(app)
     
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    CORS(app, resources={r"/*": {"origins": "https://imockmarket.vercel.app"}}, supports_credentials=True)
+
     # Import models to ensure they're mapped
     from .models.user import User
     from .models.transactions import Transaction
@@ -134,8 +135,8 @@ def create_app():
         create_admin()
         
         update_history = UpdateHistory()
-        #DataSeed.load_available_stocks(app)
-        #update_history.update_price_history(app)
+        DataSeed.load_available_stocks(app)
+        update_history.update_price_history(app)
         
         scheduler = BackgroundScheduler()
         scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
