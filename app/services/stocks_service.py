@@ -95,7 +95,8 @@ class StocksService:
         
     def buy_stocks(self, user_id, symbol, wallet_id, quantity):
         try:
-            quantity = validate_positive_number(quantity, "quantity")
+            # Decimal: quantity is multiplied by the Numeric current_price.
+            quantity = validate_positive_number(quantity, "quantity", as_decimal=True)
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
@@ -147,7 +148,8 @@ class StocksService:
             
     def sell_stock(self, user_id, symbol, wallet_id, quantity):
         try:
-            quantity = validate_positive_number(quantity, "quantity")
+            # Decimal: quantity is multiplied by the Numeric current_price.
+            quantity = validate_positive_number(quantity, "quantity", as_decimal=True)
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
