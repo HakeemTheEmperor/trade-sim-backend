@@ -31,9 +31,9 @@ class Transaction(db.Model):
     transaction_type = db.Column(db.Enum(TransactionType), nullable=False)
     transaction_category = db.Column(db.Enum(TransactionCategory), nullable=False)
 
-    quantity = db.Column(db.Integer, nullable=True)
-    price_per_share = db.Column(db.Float, nullable=True)
-    total_value = db.Column(db.Float, nullable=False)
+    quantity = db.Column(db.Numeric(15, 6), nullable=True)
+    price_per_share = db.Column(db.Numeric(15, 6), nullable=True)
+    total_value = db.Column(db.Numeric(18, 4), nullable=False)
     currency = db.Column(db.Enum(WalletCurrencyType), nullable=False)
     timestamp = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     

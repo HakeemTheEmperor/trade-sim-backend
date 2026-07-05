@@ -1,3 +1,4 @@
+from decimal import Decimal
 from .. import db
 from enum import Enum
 
@@ -11,7 +12,7 @@ class Wallet(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    balance = db.Column(db.Float, default=100000.00, nullable=False)
+    balance = db.Column(db.Numeric(18, 4), default=Decimal("100000.00"), nullable=False)
     currency = db.Column(db.Enum(WalletCurrencyType), default=WalletCurrencyType.USD, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)

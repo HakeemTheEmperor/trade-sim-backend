@@ -3,13 +3,11 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.custom_exceptions import MissingProperties
 from ..services.wallet_service import WalletService, WalletCurrencyType
-from ..utils.auth_utils import require_api_key, role_required
 
 bp = Blueprint("wallet", __name__, url_prefix="/api/v1/wallet")
 wallet_service = WalletService()
 
 @bp.route("/all", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_all_user_wallets():
     user_id = get_jwt_identity()
@@ -22,7 +20,6 @@ def get_all_user_wallets():
     }), 200
     
 @bp.route("/<int:wallet_id>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_user_wallet_by_id(wallet_id):
     user_id = get_jwt_identity()
@@ -33,7 +30,6 @@ def get_user_wallet_by_id(wallet_id):
     })
     
 @bp.route("/create", methods=["POST"])
-@require_api_key()
 @jwt_required()
 def create_wallet():
     user_id = get_jwt_identity()
@@ -45,7 +41,6 @@ def create_wallet():
     }), 201
     
 @bp.route('/delete', methods=['DELETE'])
-@require_api_key()
 @jwt_required()
 def delete_wallet():
     user_id = get_jwt_identity()
@@ -58,7 +53,6 @@ def delete_wallet():
     return jsonify(response), 200
 
 @bp.route('/transfer', methods=['POST'])
-@require_api_key()
 @jwt_required()
 def wallet_transfer():
     user_id = get_jwt_identity()
@@ -69,7 +63,6 @@ def wallet_transfer():
             'status': "MISSING REQUIRED PROPERTIES",
             'error_code': 400
         }), 400
-    print("Got here")
     from_wallet_id = data["from_wallet_id"]
     to_wallet_id = data["to_wallet_id"]
     amount = data["amount"]

@@ -1,10 +1,13 @@
 from decimal import Decimal
+import logging
 import time
 import json
 import threading
 import os
 from websocket import WebSocketApp
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 finnhub_url = os.getenv("FINNHUB_WS_URL", "wss://ws.finnhub.io")  # Default if not set
 finnhub_api_key = os.getenv("FINNHUB_API_KEY")
@@ -41,7 +44,7 @@ class WebSocketListener:
         from . import db
         from .models.stock_price import StockPrice
         with self.buffer_lock:
-            print("Updating db")
+            logger.debug("Flushing price buffer to db")
             if not self.price_buffer:
                 return  # Nothing to flush
             with self.app.app_context():
@@ -59,7 +62,7 @@ class WebSocketListener:
                         stock = StockPrice(symbol=symbol, current_price=price_decimal)
                     db.session.add(stock)
                 db.session.commit()
-                print(f"Updated {len(self.price_buffer)} symbols: {list(self.price_buffer.keys())}")
+                logger.info("Updated %d symbols", len(self.price_buffer))
                 self.price_buffer.clear()  # Clear after commit
 
     def on_message(self, ws, message):
@@ -72,17 +75,17 @@ class WebSocketListener:
                     self.price_buffer[symbol] = price  # Buffer the latest price
 
     def on_error(self, ws, error):
-        print(f"WebSocket error: {error}")
+        logger.error("WebSocket error: %s", error)
 
     def on_close(self, ws, close_status_code, close_msg):
-        print(f"WebSocket closed (code: {close_status_code}, msg: {close_msg})")
+        logger.warning("WebSocket closed (code: %s, msg: %s)", close_status_code, close_msg)
         if self.running:
             time.sleep(30)
-            print("Attempting to reconnect")
+            logger.info("Attempting to reconnect")
             self.start_websocket()
 
     def on_open(self, ws):
-        print("### OPEN ###")
+        logger.info("WebSocket connection opened")
         for symbol in self.symbols:
             ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
 
@@ -100,7 +103,7 @@ class WebSocketListener:
         )
         self.thread = threading.Thread(target=self.ws.run_forever, daemon=True)
         self.thread.start()
-        print("WebSocket listener started")
+        logger.info("WebSocket listener started")
 
     def stop(self):
         if self.ws and self.running:
@@ -108,7 +111,7 @@ class WebSocketListener:
             self.ws.close()
             self.thread = None
             self.flush_buffer_to_db()  # Flush any remaining updates
-            print("WebSocket listener stopped")
+            logger.info("WebSocket listener stopped")
 
     def update_stock_price(self, symbol, price):
         # Kept for reference, but not used directly now

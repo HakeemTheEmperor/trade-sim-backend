@@ -16,7 +16,8 @@ RUN pip install --upgrade pip && pip install pipenv
 # Copy the Pipfile and Pipfile.lock to the container
 COPY Pipfile Pipfile.lock ./
 
-# Install dependencies using pipenv
+# Install dependencies using pipenv (gunicorn + Flask-Migrate are now tracked
+# in the Pipfile/lock, so --deploy installs everything).
 RUN pipenv install --deploy
 
 # Copy the rest of the application code to the container

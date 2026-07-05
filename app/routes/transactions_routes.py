@@ -1,13 +1,11 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..services.transactions_service import TransactionsService, TransactionCategory
-from ..utils.auth_utils import require_api_key
 
 bp = Blueprint("transactions", __name__, url_prefix="/api/v1/transactions")
 transaction_service = TransactionsService()
 
 @bp.route("/history", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_user_transactions_history():
     user_id = get_jwt_identity()
@@ -21,7 +19,6 @@ def get_user_transactions_history():
     return jsonify(result), 200
 
 @bp.route("/transaction/<id>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_user_transaction_details(id):
     user_id = get_jwt_identity()
