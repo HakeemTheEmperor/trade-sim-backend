@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 import os
 from ..services.auth_service import AuthService
 from ..utils.auth_utils import require_api_key, role_required
+from ..utils.rate_limit import rate_limit
 
 bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 auth_service = AuthService()
@@ -25,6 +26,7 @@ def admin_create():
     return jsonify({"message": "Admin created successfully", "user": new_user}), 201
 
 @bp.route("/signup", methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 @require_api_key()
 def user_signup():
     data = request.get_json()
@@ -52,6 +54,7 @@ def user_signup():
         raise
     
 @bp.route('/signin', methods=['POST'])
+@rate_limit(max_requests=5, window_seconds=60)
 @require_api_key()
 def signin():
     data = request.get_json()
@@ -70,13 +73,6 @@ def signin():
             "token": access_token,
             "user": user.to_dict()}), 200
     return jsonify({'message': 'Invalid email or password'}), 401
-
-@bp.route("/debug-token", methods=["GET"])
-@jwt_required()
-def debug_token():
-    claims = get_jwt()
-    user_id = get_jwt_identity()
-    return jsonify({"user_id": user_id, "claims": claims})
 
 @bp.route("/logout", methods=["POST"])
 @require_api_key()

@@ -1,27 +1,34 @@
 from flask import jsonify
 from sqlalchemy.exc import IntegrityError
+from werkzeug.exceptions import HTTPException
 from .custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, LimitReached, MissingProperties, WalletNotFound
 
 def register_error_handlers(app):
     @app.errorhandler(ValueError)
     def handle_value_error(e):
+        # ValueErrors are raised deliberately for user-facing validation
+        # messages (e.g. "Amount must be greater than zero"), so it's safe to
+        # surface the message.
         return jsonify({
             'message': str(e),
             'status': 'Value Error',
             'error_code': 400
             }), 400
-    
+
     @app.errorhandler(IntegrityError)
     def handle_integrity_error(e):
         return jsonify({
-            'message': 'Database error, please try again', 
-            'status': 'INTEGRITY ERROR', 
+            'message': 'Database error, please try again',
+            'status': 'INTEGRITY ERROR',
             'error_code': 409}), 409
 
     @app.errorhandler(RuntimeError)
     def handle_runtime_error(e):
+        # Services wrap arbitrary exceptions as RuntimeError(str(e)), which can
+        # carry SQL/driver internals. Log the detail server-side, return generic.
+        app.logger.exception("Unhandled runtime error")
         return jsonify({
-            'message': str(e), 
+            'message': 'An unexpected error occurred. Please try again later.',
             'status': 'RUNTIME ERROR',
             'error_code': 500}), 500
     
@@ -80,3 +87,18 @@ def register_error_handlers(app):
             'status': 'Insufficient Funds Error',
             'error_code': 403
         }), 403
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        # Preserve genuine HTTP errors (404, 405, 401, ...) so they keep their
+        # status and don't get masked as 500s.
+        if isinstance(e, HTTPException):
+            return e
+        # Anything else is unexpected: log the detail, return a generic 500 so
+        # stack traces / internals never reach the client.
+        app.logger.exception("Unhandled exception")
+        return jsonify({
+            'message': 'An unexpected error occurred. Please try again later.',
+            'status': 'INTERNAL SERVER ERROR',
+            'error_code': 500
+        }), 500
