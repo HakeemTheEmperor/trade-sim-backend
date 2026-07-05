@@ -1,5 +1,22 @@
 # Task: Money → Decimal + introduce DB migrations (Flask-Migrate/Alembic)
 
+> **STATUS: IMPLEMENTED (2026-07-05).** Flask-Migrate is wired up; `migrations/`
+> holds a baseline revision (`cc30a7d4cdf3`) and the money-to-numeric revision
+> (`74b08526d730`). Models, defaults, a global Decimal JSON provider, and the
+> service arithmetic are all converted. Verified against a real Postgres 16:
+> the money migration preserves values, is reversible (downgrade→upgrade round
+> trips), and buy/sell/transfer/portfolio all compute correctly with Decimal.
+> `flask db upgrade` runs on startup via `bootstrap.sh`.
+>
+> **⚠️ One-time step for the EXISTING production DB** (its tables were created by
+> the old `create_all()`, so it has no alembic history): before the first deploy
+> of this change, stamp it at baseline so `upgrade` only runs the money revision,
+> not the table-creating baseline:
+> ```
+> RUN_BACKGROUND_JOBS=false flask db stamp cc30a7d4cdf3   # one time, existing DB only
+> ```
+> Fresh databases need nothing — `flask db upgrade` builds the whole schema.
+
 **Why:** Money is currently stored in `Float` columns, which drift on rounding. The
 schema is also half-migrated already (stock prices/quantities are `Numeric`, balances
 are `Float`), and that mismatch is what caused the `Decimal * float` TypeError in

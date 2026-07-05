@@ -1,7 +1,10 @@
 import atexit
 import logging
+from decimal import Decimal
 from flask import Flask, jsonify
+from flask.json.provider import DefaultJSONProvider
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from flask_cors import CORS
@@ -15,8 +18,22 @@ from .error_handlers import register_error_handlers
 from .websocket_listener import WebSocketListener
 
 db = SQLAlchemy()
+migrate = Migrate()
 jwt = JWTManager()
 logger = logging.getLogger(__name__)
+
+
+class DecimalJSONProvider(DefaultJSONProvider):
+    """Serialize Decimal (money columns are now Numeric/Decimal) as JSON numbers.
+
+    Flask's default provider raises on Decimal. Emitting float keeps the API
+    response shape unchanged (amounts stay JSON numbers); the exact value is
+    still preserved in the database.
+    """
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return float(o)
+        return super().default(o)
 
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
@@ -78,6 +95,7 @@ def create_app():
     )
 
     app = Flask(__name__)
+    app.json = DecimalJSONProvider(app)
 
     SWAGGER_URL = os.getenv("SWAGGER_URL")
     API_URL = os.getenv("API_URL")
@@ -108,7 +126,10 @@ def create_app():
 
     # Initialize SQLAlchemy
     db.init_app(app)
-    
+
+    # Initialize Alembic migrations (schema is owned by migrations, not create_all)
+    migrate.init_app(app, db)
+
     # Initialize JWT
     jwt.init_app(app)
     
@@ -167,17 +188,16 @@ def create_app():
     
 
     
-    # Create tables
-    with app.app_context():
-        db.create_all()
-        create_admin()
+    # Schema is managed by Alembic migrations (`flask db upgrade`), not create_all.
+    # The startup work below (admin seeding, price seeding, scheduler, websocket)
+    # touches the DB and must run only on the primary app process AFTER migrations
+    # have been applied. It's gated so `flask db ...` CLI commands (which set
+    # RUN_BACKGROUND_JOBS=false) can build the app without triggering any of it,
+    # and so extra web workers/instances don't duplicate the scheduler/websocket.
+    if os.getenv("RUN_BACKGROUND_JOBS", "true").lower() == "true":
+        with app.app_context():
+            create_admin()
 
-        # The scheduler + websocket listener are process-global singletons. They
-        # are gated so they run exactly once: with gunicorn --workers 1 this is
-        # the single worker. If ever scaled to multiple workers/instances, run
-        # background jobs in ONE dedicated process and set RUN_BACKGROUND_JOBS=false
-        # on the others to avoid duplicate schedulers/websocket connections.
-        if os.getenv("RUN_BACKGROUND_JOBS", "true").lower() == "true":
             update_history = UpdateHistory()
             DataSeed.load_available_stocks(app)
             update_history.update_price_history(app)
@@ -190,7 +210,7 @@ def create_app():
 
             websocket_listener = WebSocketListener(app)
             websocket_listener.start()
-        else:
-            logger.info("RUN_BACKGROUND_JOBS is disabled; skipping scheduler and websocket listener")
+    else:
+        logger.info("RUN_BACKGROUND_JOBS is disabled; skipping DB startup work (admin/seed/scheduler/websocket)")
 
     return app

@@ -2,19 +2,15 @@ import math
 from decimal import Decimal, InvalidOperation
 
 
-def validate_positive_number(value, field_name="value", as_decimal=False):
-    """Coerce ``value`` to a strictly-positive, finite number.
+def validate_positive_number(value, field_name="value"):
+    """Coerce ``value`` to a strictly-positive, finite ``Decimal``.
 
-    Guards the money/quantity paths against the classic exploits:
-    non-numeric input, negative values (which flip subtraction into a credit),
-    and NaN/inf (note: ``float("nan") <= 0`` is ``False``, so a naive ``> 0``
-    check alone is bypassable). Raises ``ValueError`` on any invalid input so
-    the existing ValueError handler returns a clean 400.
-
-    Set ``as_decimal=True`` when the value is used in arithmetic with Decimal
-    columns (e.g. stock quantities multiplied by a Numeric price): mixing
-    Decimal and float raises TypeError, so those callers need a Decimal back.
-    Money paths that operate on Float columns keep the default float return.
+    All money/quantity columns are Numeric (Decimal), so the whole money path is
+    Decimal end-to-end and this always returns a Decimal. Guards against the
+    classic exploits: non-numeric input, negative values (which flip subtraction
+    into a credit), and NaN/inf (note ``float("nan") <= 0`` is ``False``, so a
+    naive ``> 0`` check alone is bypassable). Raises ``ValueError`` on any invalid
+    input so the existing ValueError handler returns a clean 400.
     """
     if value is None:
         raise ValueError(f"{field_name} is required")
@@ -26,13 +22,11 @@ def validate_positive_number(value, field_name="value", as_decimal=False):
         raise ValueError(f"{field_name} must be a valid number")
     if number <= 0:
         raise ValueError(f"{field_name} must be greater than zero")
-    if as_decimal:
-        try:
-            # str(value) avoids importing float rounding artifacts into Decimal.
-            return Decimal(str(value))
-        except (InvalidOperation, ValueError):
-            raise ValueError(f"{field_name} must be a valid number")
-    return number
+    try:
+        # str(value) avoids importing float rounding artifacts into Decimal.
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{field_name} must be a valid number")
 
 
 def validate_wallet_id(value, field_name="wallet id"):

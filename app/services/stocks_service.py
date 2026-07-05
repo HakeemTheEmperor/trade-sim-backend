@@ -95,8 +95,7 @@ class StocksService:
         
     def buy_stocks(self, user_id, symbol, wallet_id, quantity):
         try:
-            # Decimal: quantity is multiplied by the Numeric current_price.
-            quantity = validate_positive_number(quantity, "quantity", as_decimal=True)
+            quantity = validate_positive_number(quantity, "quantity")
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
@@ -105,8 +104,7 @@ class StocksService:
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
-            total_cost = current_price * quantity
-            total_cost = float(total_cost)
+            total_cost = current_price * quantity  # Decimal * Decimal
 
             # Lock the wallet row for the duration of the transaction so two
             # concurrent buys can't both pass the balance check (double-spend).
@@ -149,7 +147,7 @@ class StocksService:
     def sell_stock(self, user_id, symbol, wallet_id, quantity):
         try:
             # Decimal: quantity is multiplied by the Numeric current_price.
-            quantity = validate_positive_number(quantity, "quantity", as_decimal=True)
+            quantity = validate_positive_number(quantity, "quantity")
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
@@ -162,7 +160,7 @@ class StocksService:
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
-            total_cost = float(quantity * current_price)
+            total_cost = quantity * current_price  # Decimal * Decimal
 
             wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
             if not wallet or wallet.currency != WalletCurrencyType.USD:

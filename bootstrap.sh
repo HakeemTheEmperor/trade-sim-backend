@@ -1,5 +1,12 @@
 #!/bin/sh
+set -e
 export FLASK_APP=app.index
+
+# Apply DB migrations before serving. RUN_BACKGROUND_JOBS=false so building the
+# app for this CLI command doesn't trigger admin/seed/scheduler/websocket (which
+# also need the tables this step creates).
+RUN_BACKGROUND_JOBS=false pipenv run flask db upgrade
+
 # Serve with gunicorn (a production WSGI server) instead of the Flask dev
 # server, with the debugger disabled. A single worker is used on purpose: the
 # APScheduler jobs and the Finnhub websocket listener are started inside

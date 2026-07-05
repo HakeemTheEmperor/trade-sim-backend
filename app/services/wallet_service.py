@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 import os
 import requests
@@ -45,7 +46,8 @@ class WalletService:
             data = response.json()
             if data.get("result") != "success":
                 raise DataNotFound("Failed to fetch exchange rate")
-            return data.get("conversion_rate")
+            # Return Decimal so it composes with the Numeric balance/amount math.
+            return Decimal(str(data.get("conversion_rate")))
         except DataNotFound:
             raise
         except Exception as e:

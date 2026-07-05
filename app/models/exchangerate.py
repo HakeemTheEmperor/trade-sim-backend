@@ -7,7 +7,7 @@ class ExchangeRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     base_currency = db.Column(db.Enum(WalletCurrencyType), nullable=False)
     target_currency = db.Column(db.Enum(WalletCurrencyType), nullable=False)
-    rate = db.Column(db.Float, nullable=False)
+    rate = db.Column(db.Numeric(18, 8), nullable=False)
     last_updated = db.Column(db.DateTime(timezone=True), default=db.func.now(), onupdate=db.func.now(), nullable=False)
 
     

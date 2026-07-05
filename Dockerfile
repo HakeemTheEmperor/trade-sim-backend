@@ -19,9 +19,10 @@ COPY Pipfile Pipfile.lock ./
 # Install dependencies using pipenv
 RUN pipenv install --deploy
 
-# Install the production WSGI server into the pipenv virtualenv. Pinned for
-# reproducibility; kept out of the Pipfile so the full lockfile isn't re-resolved.
-RUN pipenv run pip install "gunicorn==23.0.0"
+# Install the production WSGI server and DB migration tool into the pipenv
+# virtualenv. Pinned for reproducibility; kept out of the Pipfile so the full
+# lockfile isn't re-resolved. (Local dev: `pipenv run pip install Flask-Migrate`.)
+RUN pipenv run pip install "gunicorn==23.0.0" "Flask-Migrate==4.1.0"
 
 # Copy the rest of the application code to the container
 COPY . .
