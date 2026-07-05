@@ -114,8 +114,8 @@ def reset_password():
     data = request.get_json()
     
     if not data or not all(key in data for key in ['old_password', 'new_password']):
-        return jsonify({"error": "Missing required fields (old_password, new_password)"}),
-    
+        return jsonify({"error": "Missing required fields (old_password, new_password)"}), 400
+
     user = auth_service.reset_password(user_id, data)
     logged_out = auth_service.logout(jti)
     if user and logged_out:
