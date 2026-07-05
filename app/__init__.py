@@ -93,6 +93,19 @@ def create_app():
     app.config["JWT_BLACKLIST_ENABLED"] = True  # Enable token blacklisting
     app.config["JWT_BLACKLIST_TOKEN_CHECKS"] = ["access", "refresh"]
 
+    # --- JWT in HttpOnly cookies (instead of a client-readable header) ---
+    # The token lives in an HttpOnly cookie the browser sends automatically, so
+    # JavaScript (and any XSS) can't read it. FE and BE are same-site (both under
+    # toluwalase.me), so SameSite=Lax works and no third-party-cookie issues apply.
+    app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
+    # Secure=True in prod (HTTPS). Overridable so local dev over http:// can set it False.
+    app.config["JWT_COOKIE_SECURE"] = os.getenv("JWT_COOKIE_SECURE", "True").lower() == "true"
+    app.config["JWT_COOKIE_SAMESITE"] = os.getenv("JWT_COOKIE_SAMESITE", "Lax")
+    # Double-submit CSRF: a JS-readable csrf cookie must be echoed as a header on
+    # state-changing requests. Protects the cookie-auth'd endpoints against CSRF.
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = True
+    app.config["JWT_ACCESS_COOKIE_PATH"] = "/"
+
     # Initialize SQLAlchemy
     db.init_app(app)
     
