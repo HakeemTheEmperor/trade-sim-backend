@@ -10,6 +10,7 @@ from ..models.stock_history import StockHistory
 from ..models.stock_price import StockPrice
 from ..models.wallet import Wallet, WalletCurrencyType
 from ..utils.enums_utils import ErrorStatuses
+from ..utils.validation_utils import validate_positive_number
 from .. import db
 
 class StocksService:
@@ -91,6 +92,7 @@ class StocksService:
         
     def buy_stocks(self, user_id, symbol, wallet_id, quantity):
         try:
+            quantity = validate_positive_number(quantity, "quantity")
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
@@ -101,15 +103,17 @@ class StocksService:
             current_price = stock_price.current_price
             total_cost = current_price * quantity
             total_cost = float(total_cost)
-            
-            wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).first()
+
+            # Lock the wallet row for the duration of the transaction so two
+            # concurrent buys can't both pass the balance check (double-spend).
+            wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
             if not wallet:
                 raise DataNotFound("We did not find the specified wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
             if wallet.balance < total_cost:
                 raise ValueError("Insufficient balance.")
             wallet.balance -= total_cost
-            
-            stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).first()
+
+            stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).with_for_update().first()
             if stock_wallet:
                 stock_wallet.quantity += quantity
             else:
@@ -140,10 +144,13 @@ class StocksService:
             
     def sell_stock(self, user_id, symbol, wallet_id, quantity):
         try:
+            quantity = validate_positive_number(quantity, "quantity")
+            symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
                 raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
-            stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).first()
+            # Lock the holding so concurrent sells can't oversell the same shares.
+            stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).with_for_update().first()
             if not stock_wallet or stock_wallet.quantity < quantity:
                 raise ValueError(f"You do not have {quantity} units of {stock.company_name} stock")
             stock_price = StockPrice.query.filter_by(symbol=symbol).first()
@@ -151,8 +158,8 @@ class StocksService:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
             total_cost = float(quantity * current_price)
-            
-            wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).first()
+
+            wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
             if not wallet or wallet.currency != WalletCurrencyType.USD:
                 raise DataNotFound("We did not find a USD wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
             wallet.balance += total_cost

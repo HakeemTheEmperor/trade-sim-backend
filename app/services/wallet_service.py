@@ -9,6 +9,7 @@ from ..models.transactions import Transaction, TransactionType, TransactionCateg
 from .. import db
 from ..custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, MissingProperties
 from ..utils.enums_utils import ErrorStatuses
+from ..utils.validation_utils import validate_positive_number, validate_wallet_id
 
 EXCHANGE_RATE_API = os.getenv("EXCHANGE_RATE_API")
 
@@ -122,14 +123,27 @@ class WalletService:
         try:
             if not from_wallet_id or not to_wallet_id or not amount:
                 raise MissingProperties("Missing sender/receiver wallet Id or amount")
+            from_wallet_id = validate_wallet_id(from_wallet_id, "sender wallet id")
+            to_wallet_id = validate_wallet_id(to_wallet_id, "receiver wallet id")
             if from_wallet_id == to_wallet_id:
                 raise ValueError("Sender and Receivers wallet id cannot be the same")
-            if not from_wallet_id or not to_wallet_id:
-                raise MissingProperties("You did not enter both sender and receiver wallet IDs")
-            amount = int(amount)
-            from_wallet = Wallet.query.filter_by(id=from_wallet_id).first()
-            to_wallet = Wallet.query.filter_by(id=to_wallet_id).first()
-            
+            # Reject non-numeric, negative, zero, and NaN/inf amounts. A negative
+            # amount would otherwise flip the subtraction below into a self-credit
+            # while debiting the recipient (theft).
+            amount = validate_positive_number(amount, "amount")
+
+            # Lock both wallet rows for the transfer, always in ascending id order
+            # so concurrent transfers between the same pair can't deadlock.
+            locked_wallets = {
+                w.id: w
+                for w in Wallet.query.filter(Wallet.id.in_([from_wallet_id, to_wallet_id]))
+                .order_by(Wallet.id)
+                .with_for_update()
+                .all()
+            }
+            from_wallet = locked_wallets.get(from_wallet_id)
+            to_wallet = locked_wallets.get(to_wallet_id)
+
             if not from_wallet or not to_wallet:
                 raise DataNotFound("Invalid wallet Id entered. Confirm both the Sender and Receiver's wallet IDs", ErrorStatuses.WALLET_NOT_FOUND.value)
             if int(from_wallet.user_id) != int(user_id):
