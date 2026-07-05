@@ -19,9 +19,10 @@ flask-jwt-extended has first-class cookie support; no new dependency needed.
 1. **Config** (in `create_app`):
    - `JWT_TOKEN_LOCATION = ["headers", "cookies"]`  ← dual mode during rollout, tighten to `["cookies"]` at the end
    - `JWT_COOKIE_SECURE = True`  (HTTPS only)
-   - `JWT_COOKIE_SAMESITE = "None"` if FE/BE are on different sites (requires Secure), else `"Lax"`
+   - `JWT_COOKIE_SAMESITE = "Lax"`  ← FE and BE are same-site (see topology below), so `Lax` works; do NOT use `None`
    - `JWT_COOKIE_CSRF_PROTECT = True`  (enables the double-submit CSRF token)
    - optionally `JWT_ACCESS_COOKIE_PATH = "/api/"`
+   - do **not** set a cookie `Domain` attribute — leave it host-only on the API host (more secure; the browser still sends it on same-site credentialed requests)
 2. **Login / signup** (`auth_routes.py`): build the response, then
    `set_access_cookies(response, access_token)` instead of putting the token in the body.
 3. **Logout** (`auth_routes.py`): `unset_jwt_cookies(response)` (keep the revoked-token/blocklist logic).
@@ -65,11 +66,31 @@ cannot read the cookie to set the header, so it's rejected. flask-jwt-extended v
 - [ ] A state-changing request without a valid `X-CSRF-TOKEN` is rejected (401).
 - [ ] Login, token expiry (401 → redirect), logout, and cross-tab logout all still work.
 
-## Big caveat: cookie domain
+## Cookie domain: resolved — chosen topology
 
-If the frontend (`imockmarket.vercel.app`) and backend live on **different registrable
-domains**, the auth cookie is third-party and `SameSite=None; Secure` is mandatory — and
-Safari/Firefox may still block it (ITP / third-party cookie phase-out). The robust setup is
-to serve both under one site (e.g. `imockmarket.com` + `api.imockmarket.com`) so the cookie
-is first-party and `SameSite=Lax` works. **Decide the deployment domain strategy before
-starting**, as it determines whether this migration is even viable as-is.
+**Decision:** serve both apps under one registrable domain:
+
+- frontend: `https://app.imockmarket.toluwalase.me`
+- backend:  `https://api.imockmarket.toluwalase.me`
+
+`.me` is a public suffix, so the registrable domain (eTLD+1) for both hosts is
+`toluwalase.me`. That makes them **same-site** (different origins, same site). This is the
+happy path:
+
+- The auth cookie is **first-party**, so `SameSite` restrictions and the Safari/Firefox/
+  Chrome third-party-cookie clampdowns do **not** apply. Use `SameSite=Lax` (not `None`),
+  and none of the ITP/third-party-blocking pain applies.
+- The cookie is set host-only by `api.imockmarket.toluwalase.me` (no `Domain` attribute) and
+  is automatically sent back to the API on credentialed requests from the frontend.
+
+Still required because it's cross-**origin** (different hostname):
+
+- CORS must echo the explicit frontend origin `https://app.imockmarket.toluwalase.me` (never
+  `*`) with `Access-Control-Allow-Credentials: true` — already handled via `CORS_ORIGINS` +
+  `supports_credentials=True`.
+- Frontend must send `credentials: "include"` on every request.
+- Both hosts must be HTTPS (required for `Secure` cookies).
+
+The only constraint to preserve: keep both apps under `toluwalase.me`. If either ever moves
+to a different registrable domain, revisit this — it would become cross-site and force
+`SameSite=None` with all the third-party-cookie caveats.
