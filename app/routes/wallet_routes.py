@@ -69,7 +69,6 @@ def wallet_transfer():
             'status': "MISSING REQUIRED PROPERTIES",
             'error_code': 400
         }), 400
-    print("Got here")
     from_wallet_id = data["from_wallet_id"]
     to_wallet_id = data["to_wallet_id"]
     amount = data["amount"]

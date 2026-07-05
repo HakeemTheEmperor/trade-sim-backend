@@ -6,12 +6,12 @@ from ..models.wallet import Wallet, WalletCurrencyType
 from ..models.transactions import Transaction, TransactionCategory
 from .. import db
 from ..custom_exceptions import DataNotFound, MissingProperties
+from ..utils.validation_utils import clamp_pagination
 
 class TransactionsService:
     def get_transaction_history(self, user_id, wallet_id, currency, transaction_category, sort, page, rows):
-        # Check for value entered else use default
-        page = int(page) if isinstance(page, (str, int)) else 1
-        rows = int(rows) if isinstance(rows, (str, int)) else 10
+        # Check for value entered else use default; cap page size to avoid unbounded queries
+        page, rows = clamp_pagination(page, rows)
         sort = sort.lower() if isinstance(sort, str) else 'asc'
         
         try:

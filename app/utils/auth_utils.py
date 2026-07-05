@@ -33,9 +33,7 @@ def role_required(required_role):
         def wrapper(*args, **kwargs):
             claims = get_jwt()
             user_role = claims.get("role")
-            print(user_role)
-            print(required_role)
-            
+
             if user_role != required_role:
                 return jsonify({
                     "message": "Forbidden: You do not have the required role to access this endpoint",

@@ -9,14 +9,17 @@ from ..models.stock_available import AvailableStocks
 from ..models.stock_history import StockHistory
 from ..models.stock_price import StockPrice
 from ..models.wallet import Wallet, WalletCurrencyType
+import logging
+
 from ..utils.enums_utils import ErrorStatuses
-from ..utils.validation_utils import validate_positive_number
+from ..utils.validation_utils import validate_positive_number, clamp_pagination
 from .. import db
+
+logger = logging.getLogger(__name__)
 
 class StocksService:
     def get_available_stocks(self, page=1, rows=10, sort_by='symbol', sort='asc'):
-        page = int(page) if isinstance(page, (str, int)) else 1
-        rows = int(rows) if isinstance(rows, (str, int)) else 10
+        page, rows = clamp_pagination(page, rows)
         sort = sort.lower() if isinstance(sort, str) else 'asc'
         sort_by = sort_by.lower() if isinstance(sort_by, str) else 'symbol'
         
@@ -302,6 +305,6 @@ class StocksService:
                 "profit_loss_percentage": profit_loss_percentage
             }
         except Exception as e:
-            print(e)
+            logger.exception("Failed to compute user portfolio")
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occured: {str(e)}")

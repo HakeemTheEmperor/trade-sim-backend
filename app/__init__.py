@@ -1,4 +1,5 @@
 import atexit
+import logging
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
@@ -15,6 +16,7 @@ from .websocket_listener import WebSocketListener
 
 db = SQLAlchemy()
 jwt = JWTManager()
+logger = logging.getLogger(__name__)
 
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
@@ -54,9 +56,9 @@ def create_admin():
         admin_user.set_password(admin_password)
         db.session.add(admin_user)
         db.session.commit()
-        print("Admin user created successfully")
+        logger.info("Admin user created successfully")
     else:
-        print("Admin user already exists")
+        logger.info("Admin user already exists")
 
 def seed_available_stock():
     from .models.stock_available import AvailableStocks
@@ -65,12 +67,18 @@ def seed_available_stock():
         if not AvailableStocks.query.filter_by(symbol=symbol).first():
             db.session.add(AvailableStocks(symbol=symbol))
     db.session.commit()
-    print("Default available symbols seeded")
+    logger.info("Default available symbols seeded")
 
 def create_app():
     load_dotenv()
+
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
     app = Flask(__name__)
-    
+
     SWAGGER_URL = os.getenv("SWAGGER_URL")
     API_URL = os.getenv("API_URL")
     
@@ -91,7 +99,24 @@ def create_app():
     # Initialize JWT
     jwt.init_app(app)
     
-    CORS(app, resources={r"/*": {"origins": "https://imockmarket.vercel.app"}}, supports_credentials=True)
+    # Allowed origins are configurable per environment (comma-separated), so the
+    # frontend URL isn't hardcoded. Defaults to the production Vercel app.
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv("CORS_ORIGINS", "https://imockmarket.vercel.app").split(",")
+        if origin.strip()
+    ]
+    CORS(app, resources={r"/*": {"origins": cors_origins}}, supports_credentials=True)
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        # Instructs browsers to stick to HTTPS. Harmless if the API is served
+        # over TLS (as it should be); ignored by browsers over plain HTTP.
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
     # Import models to ensure they're mapped
     from .models.user import User
@@ -133,18 +158,26 @@ def create_app():
     with app.app_context():
         db.create_all()
         create_admin()
-        
-        update_history = UpdateHistory()
-        DataSeed.load_available_stocks(app)
-        update_history.update_price_history(app)
-        
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
-        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
-        scheduler.start()
-        atexit.register(lambda: scheduler.shutdown())
-        
-        websocket_listener = WebSocketListener(app)
-        websocket_listener.start()
+
+        # The scheduler + websocket listener are process-global singletons. They
+        # are gated so they run exactly once: with gunicorn --workers 1 this is
+        # the single worker. If ever scaled to multiple workers/instances, run
+        # background jobs in ONE dedicated process and set RUN_BACKGROUND_JOBS=false
+        # on the others to avoid duplicate schedulers/websocket connections.
+        if os.getenv("RUN_BACKGROUND_JOBS", "true").lower() == "true":
+            update_history = UpdateHistory()
+            DataSeed.load_available_stocks(app)
+            update_history.update_price_history(app)
+
+            scheduler = BackgroundScheduler()
+            scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
+            scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
+            scheduler.start()
+            atexit.register(lambda: scheduler.shutdown())
+
+            websocket_listener = WebSocketListener(app)
+            websocket_listener.start()
+        else:
+            logger.info("RUN_BACKGROUND_JOBS is disabled; skipping scheduler and websocket listener")
 
     return app

@@ -1,6 +1,12 @@
 from decimal import Decimal
+import logging
 import os
 import requests
+
+logger = logging.getLogger(__name__)
+
+# Cap outbound calls so a slow provider can't stall the seed job.
+REQUEST_TIMEOUT_SECONDS = 15
 
 class DataSeed:
     
@@ -21,12 +27,12 @@ class DataSeed:
             try:
                 for symbol in default_symbols:
                     url = f"{base_url}{symbol}?apikey={api_key}"
-                    response = requests.get(url)
+                    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
                     response.raise_for_status()
                     data = response.json()
 
                     if not data:
-                        print(f"No data found for {symbol}")
+                        logger.warning("No data found for %s", symbol)
                         continue
 
                     stock_data = data[0]
@@ -52,7 +58,7 @@ class DataSeed:
                             description=stock_data.get("description")
                         )
                         db.session.add(stock)
-                    print(f"Loaded {symbol} - {stock_data.get('companyName')}")
+                    logger.info("Loaded %s - %s", symbol, stock_data.get("companyName"))
                     price_decimal = Decimal(str(stock_data.get("price")))
                     
                     stock_price = StockPrice.query.filter_by(symbol=symbol).first()
@@ -70,9 +76,9 @@ class DataSeed:
                 db.session.commit()
 
             except requests.RequestException as e:
-                print(f"API error: {e}")
+                logger.exception("API error while seeding stocks")
                 db.session.rollback()
             except Exception as e:
-                print(f"Database error: {e}")
+                logger.exception("Database error while seeding stocks")
                 db.session.rollback()
                 

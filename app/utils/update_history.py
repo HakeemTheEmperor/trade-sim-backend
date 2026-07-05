@@ -1,7 +1,13 @@
+import logging
 import requests
 import time
 import os
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+# Cap outbound calls so a slow provider can't stall the scheduler job.
+REQUEST_TIMEOUT_SECONDS = 15
 
 class UpdateHistory:
     def format_date(self,date):
@@ -26,7 +32,8 @@ class UpdateHistory:
                 
                 for symbol in symbols:
                     response = requests.get(
-                        f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{start_date_str}/{end_date_str}?adjusted=true&sort=asc&limit=120&apiKey={polygon_api_key}"
+                        f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{start_date_str}/{end_date_str}?adjusted=true&sort=asc&limit=120&apiKey={polygon_api_key}",
+                        timeout=REQUEST_TIMEOUT_SECONDS,
                     )
                     response.raise_for_status()
                     stock_data = response.json().get("results", [])
@@ -52,9 +59,9 @@ class UpdateHistory:
                             db.session.add(new_record)
                     
                     db.session.commit()
-                    print(f"Successfully updated the price history for {symbol}")
+                    logger.info("Successfully updated the price history for %s", symbol)
                     time.sleep(20)
             except Exception as e:
-                print(e)
+                logger.exception("Failed to update price history")
                 
                 

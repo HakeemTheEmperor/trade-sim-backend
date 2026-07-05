@@ -30,7 +30,6 @@ class UserService:
 
             # Validate & clean data (only includes valid fields)
             cleaned_data = self.validate_and_clean_data(data, editable_fields)
-            print(f"Cleaned Data: {cleaned_data}")
 
             # Fetch user from database
             user = User.query.get(user_id)

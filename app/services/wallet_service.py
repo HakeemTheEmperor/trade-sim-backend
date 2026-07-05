@@ -13,6 +13,9 @@ from ..utils.validation_utils import validate_positive_number, validate_wallet_i
 
 EXCHANGE_RATE_API = os.getenv("EXCHANGE_RATE_API")
 
+# Never let an outbound call hang a request/worker indefinitely.
+REQUEST_TIMEOUT_SECONDS = 10
+
 class WalletService:
     def get_exchange_rate(self, from_currency, to_currency):
         rate_record = ExchangeRate.query.filter_by(base_currency=from_currency, target_currency=to_currency).first()
@@ -38,7 +41,7 @@ class WalletService:
     def fetch_from_api(self, from_currency, to_currency):
         try:
             url = f"{EXCHANGE_RATE_API}/{from_currency.value}/{to_currency.value}"
-            response = requests.get(url)
+            response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
             data = response.json()
             if data.get("result") != "success":
                 raise DataNotFound("Failed to fetch exchange rate")
@@ -101,8 +104,6 @@ class WalletService:
             if not wallet_id:
                 raise MissingProperties("You did not provide a wallet Id")
             wallet = Wallet.query.filter_by(id=wallet_id, user_id=user_id).first()
-            print(wallet_id)
-            print(user_id)
             if not wallet:
                 raise DataNotFound("We could not find the wallet with the specified ID", ErrorStatuses.WALLET_NOT_FOUND.value)
             if wallet.balance > 1:
