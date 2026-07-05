@@ -13,10 +13,6 @@ servers:
   - url: http://127.0.0.1:5000/api/v1
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      name: x-api-key
-      in: header
     BearerAuth:
       type: http
       scheme: bearer
@@ -238,8 +234,6 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UserSignUp"
-      security:
-        - ApiKeyAuth: []
       responses:
         "201":
           content:
@@ -301,8 +295,6 @@ paths:
                   type: string
                   format: password
                   example: Password123@
-      security:
-        - ApiKeyAuth: []
       responses:
         "200":
           content:
@@ -352,7 +344,6 @@ paths:
       tags:
         - Auth
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       responses:
         "200":
@@ -406,7 +397,6 @@ paths:
             schema:
               $ref: "#/components/schemas/UserSignUp"
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       responses:
         "200":
@@ -470,7 +460,6 @@ paths:
                   format: password
                   example: PasswordNew123@
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       responses:
         "200":
@@ -510,7 +499,6 @@ paths:
       tags:
         - Wallets
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       responses:
         "200":
@@ -554,7 +542,6 @@ paths:
       tags:
         - Wallets
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       parameters:
         - name: id
@@ -603,7 +590,6 @@ paths:
       tags:
         - Wallets
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       parameters:
         - name: currency
@@ -652,7 +638,6 @@ paths:
       tags:
         - Wallets
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       requestBody:
         required: true
@@ -722,7 +707,6 @@ paths:
       tags:
         - Wallets
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       parameters:
         - name: wallet_id
@@ -781,7 +765,6 @@ paths:
       tags:
         - Transactions
       security:
-        - ApiKeyAuth: []
         - BearerAuth: []
       parameters:
         - name: wallet_id

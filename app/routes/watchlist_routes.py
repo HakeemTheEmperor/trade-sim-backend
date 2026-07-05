@@ -1,13 +1,11 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..utils.auth_utils import require_api_key, role_required
 from ..services.watchlist_service import WatchlistService
 
 bp = Blueprint("watchlist", __name__, url_prefix="/api/v1/watchlist")
 watchlist_service = WatchlistService()
 
 @bp.route("/add/<symbol>", methods=["POST"])
-@require_api_key()
 @jwt_required()
 def add_watchlist_item(symbol):
     """Add a new item to the user's watchlist."""
@@ -17,7 +15,6 @@ def add_watchlist_item(symbol):
     return jsonify(response), 200
 
 @bp.route("/get", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_watchlist():
     user_id = get_jwt_identity()
@@ -28,7 +25,6 @@ def get_watchlist():
         }), 200
 
 @bp.route("/delete/<symbol>", methods=["DELETE"])
-@require_api_key()
 @jwt_required()
 def delete_watchlist_item(symbol):
     user_id = get_jwt_identity()
@@ -37,7 +33,6 @@ def delete_watchlist_item(symbol):
     return jsonify(response), 200
 
 @bp.route("/check/<symbol>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def check_watchlist_item(symbol):
     user_id = get_jwt_identity()

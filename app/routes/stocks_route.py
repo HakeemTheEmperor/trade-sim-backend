@@ -1,13 +1,11 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..services.stocks_service import StocksService
-from ..utils.auth_utils import require_api_key, role_required
 
 bp = Blueprint("stocks", __name__, url_prefix="/api/v1/stocks")
 stocks_service = StocksService()
 
 @bp.route("/all", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_all_stocks():
     sort_by = request.args.get("sort_by")
@@ -20,7 +18,6 @@ def get_all_stocks():
     return jsonify(stocks), 200
     
 @bp.route("/search/symbol/<symbol>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def search_stock_by_symbol(symbol):
     result = stocks_service.search_stocks_by_symbol(symbol)
@@ -32,7 +29,6 @@ def search_stock_by_symbol(symbol):
         }), 200
     
 @bp.route("/symbol/<symbol>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_stock_by_symbol(symbol):
     result = stocks_service.get_stock_by_exact_symbol(symbol)
@@ -44,7 +40,6 @@ def get_stock_by_symbol(symbol):
         }), 200
 
 @bp.route("/id/<id>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_stock_by_id(id):
     result = stocks_service.get_stock_by_id(id)
@@ -54,7 +49,6 @@ def get_stock_by_id(id):
     }), 200
 
 @bp.route("/search/company/<name>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_stocks_by_company_name(name):
     result = stocks_service.get_stocks_by_company_name(name)
@@ -66,13 +60,12 @@ def get_stocks_by_company_name(name):
         }), 200
     
 @bp.route("/stock/price/<symbol>", methods=["GET"])
-@require_api_key()
+@jwt_required()
 def get_stock_price(symbol):
     result = stocks_service.get_stocks_price(symbol)
     return jsonify({"message": "Stock price fetched successfully", "data": result}), 200
 
 @bp.route("/buy", methods=["POST"])
-@require_api_key()
 @jwt_required()
 def buy_stock():
     user_id = get_jwt_identity()
@@ -86,7 +79,6 @@ def buy_stock():
     return jsonify(message), 200
 
 @bp.route("/sell", methods=["POST"])
-@require_api_key()
 @jwt_required()
 def sell_stock():
     user_id = get_jwt_identity()
@@ -102,7 +94,6 @@ def sell_stock():
 
 
 @bp.route("/user", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_all_user_stocks():
     user_id = get_jwt_identity()
@@ -110,7 +101,6 @@ def get_all_user_stocks():
     return jsonify({"message": "Stocks retrieved successfully", "data": result}), 200
 
 @bp.route("/user/quantity/<symbol>", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_user_stock_quantity(symbol):
     user_id = get_jwt_identity()
@@ -118,7 +108,7 @@ def get_user_stock_quantity(symbol):
     return jsonify({"message": "Stocks retrieved successfully", "data": result}), 200
 
 @bp.route("/stock/history/<symbol>", methods=["GET"])
-@require_api_key()
+@jwt_required()
 def get_stock_history(symbol):
     result = stocks_service.get_stock_history(symbol)
     return jsonify({
@@ -127,7 +117,6 @@ def get_stock_history(symbol):
 
 
 @bp.route("/portfolio", methods=["GET"])
-@require_api_key()
 @jwt_required()
 def get_user_portfolio():
     user_id = get_jwt_identity()

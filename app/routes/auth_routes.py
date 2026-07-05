@@ -2,14 +2,13 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 import os
 from ..services.auth_service import AuthService
-from ..utils.auth_utils import require_api_key, role_required
+from ..utils.auth_utils import role_required
 from ..utils.rate_limit import rate_limit
 
 bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 auth_service = AuthService()
 
 @bp.route("/admin-signup", methods=['POST'])
-@require_api_key()
 @role_required('SUPERADMIN')
 def admin_create():
     data = request.get_json()
@@ -27,7 +26,6 @@ def admin_create():
 
 @bp.route("/signup", methods=['POST'])
 @rate_limit(max_requests=10, window_seconds=60)
-@require_api_key()
 def user_signup():
     data = request.get_json()
     required_fields = ["first_name", "last_name", "email", "password", "username"]
@@ -55,7 +53,6 @@ def user_signup():
     
 @bp.route('/signin', methods=['POST'])
 @rate_limit(max_requests=5, window_seconds=60)
-@require_api_key()
 def signin():
     data = request.get_json()
     
@@ -75,7 +72,6 @@ def signin():
     return jsonify({'message': 'Invalid email or password'}), 401
 
 @bp.route("/logout", methods=["POST"])
-@require_api_key()
 @jwt_required()
 def logout():
     jti = get_jwt()["jti"]
@@ -85,7 +81,6 @@ def logout():
     return jsonify({"message": "We were unable to log you out of your account", "status_code": 400, "status": "SIGN OUT FAIL"}), 400
 
 @bp.route("/reset-password", methods=["POST"])
-@require_api_key()
 @jwt_required()
 def reset_password():
     jti = get_jwt()["jti"]
