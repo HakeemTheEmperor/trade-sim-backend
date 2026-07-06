@@ -12,7 +12,13 @@ from ..models.wallet import Wallet, WalletCurrencyType
 import logging
 
 from ..utils.enums_utils import ErrorStatuses
-from ..utils.validation_utils import validate_positive_number, clamp_pagination
+from ..utils.validation_utils import (
+    validate_positive_number,
+    clamp_pagination,
+    quantize_quantity,
+    quantize_money,
+    MIN_TRADE_VALUE,
+)
 from .. import db
 
 logger = logging.getLogger(__name__)
@@ -95,7 +101,11 @@ class StocksService:
         
     def buy_stocks(self, user_id, symbol, wallet_id, quantity):
         try:
-            quantity = validate_positive_number(quantity, "quantity")
+            # Fractional shares are allowed; round the quantity down to the 6dp
+            # column scale, then reject if that leaves nothing.
+            quantity = quantize_quantity(validate_positive_number(quantity, "quantity"))
+            if quantity <= 0:
+                raise ValueError("Quantity is too small")
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
@@ -104,7 +114,9 @@ class StocksService:
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
-            total_cost = current_price * quantity  # Decimal * Decimal
+            total_cost = quantize_money(current_price * quantity)
+            if total_cost < MIN_TRADE_VALUE:
+                raise ValueError(f"Trade value must be at least ${MIN_TRADE_VALUE}")
 
             # Lock the wallet row for the duration of the transaction so two
             # concurrent buys can't both pass the balance check (double-spend).
@@ -146,8 +158,10 @@ class StocksService:
             
     def sell_stock(self, user_id, symbol, wallet_id, quantity):
         try:
-            # Decimal: quantity is multiplied by the Numeric current_price.
-            quantity = validate_positive_number(quantity, "quantity")
+            # Fractional shares allowed; round down to the 6dp column scale.
+            quantity = quantize_quantity(validate_positive_number(quantity, "quantity"))
+            if quantity <= 0:
+                raise ValueError("Quantity is too small")
             symbol = symbol.upper()
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
@@ -160,7 +174,8 @@ class StocksService:
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
-            total_cost = quantity * current_price  # Decimal * Decimal
+            # No minimum-value gate on sells, so any held dust can still be liquidated.
+            total_cost = quantize_money(quantity * current_price)
 
             wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
             if not wallet or wallet.currency != WalletCurrencyType.USD:
