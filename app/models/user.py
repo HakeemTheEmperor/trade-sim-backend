@@ -20,6 +20,9 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
     role = db.Column(db.Enum(UserRoles), default=UserRoles.USER, nullable=False)
     phone_number = db.Column(db.String(30), nullable=True)
+    # Opt-in discovery (phase 2): default false means a user is invisible and can
+    # only gain shadows by sending invites. Shipped false for everyone in v1.
+    is_shadow_discoverable = db.Column(db.Boolean, default=False, nullable=False)
     
     # Relationship (One user -> Many transactions)
     transactions = db.relationship("Transaction", backref="user", lazy=True)

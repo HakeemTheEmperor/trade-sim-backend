@@ -162,6 +162,8 @@ def create_app():
     from .models.stock_price import StockPrice
     from .models.stock_history import StockHistory
     from .models.watch_list import WatchList
+    from .models.shadow_link import ShadowLink
+    from .models.notification import Notification
     from .data_seed import DataSeed
     from .utils.update_history import UpdateHistory
     
@@ -177,13 +179,17 @@ def create_app():
     from .routes.stocks_route import bp as stocks_bp
     from .routes.user_routes import bp as user_bp
     from .routes.watchlist_routes import bp as watchlist_bp
-    
+    from .routes.shadow_routes import bp as shadow_bp
+    from .routes.notification_routes import bp as notification_bp
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(transaction_bp)
     app.register_blueprint(stocks_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(watchlist_bp)
+    app.register_blueprint(shadow_bp)
+    app.register_blueprint(notification_bp)
     app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
     
 

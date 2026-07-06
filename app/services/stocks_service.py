@@ -99,6 +99,12 @@ class StocksService:
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
         
+    def _notify_shadows(self, user_id, action, symbol):
+        # Imported lazily so the shadow feature stays decoupled from the trade
+        # path; the call itself never raises (it swallows and logs internally).
+        from .shadow_service import ShadowService
+        ShadowService().notify_shadows(subject_id=user_id, action=action, symbol=symbol)
+
     def buy_stocks(self, user_id, symbol, wallet_id, quantity):
         try:
             # Fractional shares are allowed; round the quantity down to the 6dp
@@ -147,6 +153,9 @@ class StocksService:
             db.session.add(transaction_log)
             db.session.add(stock_wallet)
             db.session.commit()
+            # Notify shadows AFTER the trade commits. Privacy-safe (symbol +
+            # action only) and best-effort — it can't fail or roll back the trade.
+            self._notify_shadows(user_id, "BUY", symbol)
             return {"message": f"You have successfully PURCHASED {quantity} unit of {stock.company_name} stocks for {quantity * current_price}"}
         except DataNotFound:
             raise
@@ -199,6 +208,7 @@ class StocksService:
             )
             db.session.add(transaction_log)
             db.session.commit()
+            self._notify_shadows(user_id, "SELL", symbol)
             return {"message": f"You have successfully SOLD {quantity} unit of {stock.company_name} stocks for {total_cost}"}
         except DataNotFound:
             raise
