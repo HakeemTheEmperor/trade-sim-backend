@@ -1,5 +1,24 @@
 import math
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
+
+# Scale of the quantity columns (Numeric(15, 6)) and the money columns
+# (Numeric(18, 4) balances/values). Quantizing to these keeps app-side arithmetic
+# aligned with what the DB stores, so nothing is silently truncated.
+QUANTITY_SCALE = Decimal("0.000001")
+MONEY_SCALE = Decimal("0.0001")
+# Smallest allowed trade value, to keep meaningless dust buys out of the books.
+MIN_TRADE_VALUE = Decimal("0.01")
+
+
+def quantize_quantity(quantity):
+    """Round a share quantity down to the 6dp column scale (never buy/sell more
+    than intended)."""
+    return quantity.quantize(QUANTITY_SCALE, rounding=ROUND_DOWN)
+
+
+def quantize_money(amount):
+    """Round a money amount to the 4dp column scale so balances stay exact."""
+    return amount.quantize(MONEY_SCALE, rounding=ROUND_HALF_UP)
 
 
 def validate_positive_number(value, field_name="value"):
