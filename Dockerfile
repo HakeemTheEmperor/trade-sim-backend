@@ -23,8 +23,9 @@ RUN pipenv install --deploy
 # Copy the rest of the application code to the container
 COPY . .
 
-# Make the bootstrap.sh script executable
-RUN chmod +x ./bootstrap.sh
+# Normalize line endings (a CRLF checkout on Windows would make the shebang
+# `#!/bin/sh\r`, which fails at runtime) and make the script executable.
+RUN sed -i 's/\r$//' ./bootstrap.sh && chmod +x ./bootstrap.sh
 
 # Expose the port Flask runs on
 EXPOSE 5000

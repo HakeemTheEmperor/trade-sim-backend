@@ -1,0 +1,11 @@
+# Normalize line endings. Shell scripts MUST stay LF or they break in the Linux
+# container (a CRLF shebang makes the kernel look for `/bin/sh\r`, which fails
+# with a misleading "No such file or directory").
+* text=auto eol=lf
+*.sh text eol=lf
+bootstrap.sh text eol=lf
+
+# Binary/asset types git should never touch.
+*.png binary
+*.jpg binary
+*.svg binary
