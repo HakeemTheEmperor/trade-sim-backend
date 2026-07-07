@@ -1,7 +1,6 @@
 import logging
 import requests
 import time
-import os
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -18,9 +17,8 @@ class UpdateHistory:
             from .. import db
             from ..models.stock_history import StockHistory
             from ..models.stock_available import AvailableStocks
-            
-            polygon_api_key = os.getenv("POLYGON_API_KEY")
-            
+            from ..integrations.providers import Polygon
+
             try:
                 today = datetime.today()
                 end_date = today - timedelta(days=1)
@@ -32,7 +30,7 @@ class UpdateHistory:
                 
                 for symbol in symbols:
                     response = requests.get(
-                        f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{start_date_str}/{end_date_str}?adjusted=true&sort=asc&limit=120&apiKey={polygon_api_key}",
+                        Polygon.daily_aggs_url(symbol, start_date_str, end_date_str),
                         timeout=REQUEST_TIMEOUT_SECONDS,
                     )
                     response.raise_for_status()

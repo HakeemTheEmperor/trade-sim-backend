@@ -1,6 +1,5 @@
 from decimal import Decimal
 import logging
-import os
 import requests
 
 logger = logging.getLogger(__name__)
@@ -15,8 +14,7 @@ class DataSeed:
             from . import db
             from .models.stock_available import AvailableStocks
             from .models.stock_price import StockPrice
-            api_key = os.getenv("FMP_API_KEY")
-            base_url = "https://financialmodelingprep.com/api/v3/profile/"
+            from .integrations.providers import FMP
             default_symbols = [
                 "AAPL", "NVDA", "MSFT", "AMZN", "GOOG", "META", "TSM", "TSLA", "WMT",
                 "JPM", "V", "MA", "ORCL", "UNH", "XOM", "NFLX", "PG", "HD", "KO", "TMUS", "CVX",
@@ -26,8 +24,7 @@ class DataSeed:
 
             try:
                 for symbol in default_symbols:
-                    url = f"{base_url}{symbol}?apikey={api_key}"
-                    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+                    response = requests.get(FMP.profile_url(symbol), timeout=REQUEST_TIMEOUT_SECONDS)
                     response.raise_for_status()
                     data = response.json()
 

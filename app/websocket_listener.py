@@ -3,19 +3,17 @@ import logging
 import time
 import json
 import threading
-import os
 from websocket import WebSocketApp
 from collections import defaultdict
 
-logger = logging.getLogger(__name__)
+from .integrations.providers import Finnhub
 
-finnhub_url = os.getenv("FINNHUB_WS_URL", "wss://ws.finnhub.io")  # Default if not set
-finnhub_api_key = os.getenv("FINNHUB_API_KEY")
+logger = logging.getLogger(__name__)
 
 class WebSocketListener:
     def __init__(self, app):
         self.app = app
-        self.ws_url = f"{finnhub_url}?token={finnhub_api_key}"
+        self.ws_url = Finnhub.ws_url()
         self.symbols = self.load_symbols()
         self.ws = None
         self.thread = None

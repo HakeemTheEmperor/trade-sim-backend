@@ -1,7 +1,7 @@
+import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
-import os
 import requests
 from ..models.user import User
 from ..models.wallet import Wallet, WalletCurrencyType
@@ -11,47 +11,99 @@ from .. import db
 from ..custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, MissingProperties
 from ..utils.enums_utils import ErrorStatuses
 from ..utils.validation_utils import validate_positive_number, validate_wallet_id
-
-EXCHANGE_RATE_API = os.getenv("EXCHANGE_RATE_API")
+# Aliased so it doesn't shadow the ExchangeRate *model* imported above.
+from ..integrations.providers import ExchangeRate as ExchangeRateAPI
 
 # Never let an outbound call hang a request/worker indefinitely.
 REQUEST_TIMEOUT_SECONDS = 10
 
+# Fallback freshness window used only when a cached row has no next_update (e.g.
+# a legacy row, or the provider didn't return time_next_update_unix). Normally
+# freshness is driven by the provider's own next-update timestamp instead.
+EXCHANGE_RATE_TTL_HOURS = int(os.getenv("EXCHANGE_RATE_TTL_HOURS", "24"))
+
 class WalletService:
     def get_exchange_rate(self, from_currency, to_currency):
-        rate_record = ExchangeRate.query.filter_by(base_currency=from_currency, target_currency=to_currency).first()
-        if rate_record and rate_record.last_updated > datetime.now(timezone.utc) - timedelta(hours=24):
+        if from_currency == to_currency:
+            return Decimal(1)
+
+        rate_record = ExchangeRate.query.filter_by(
+            base_currency=from_currency, target_currency=to_currency
+        ).first()
+        if rate_record and self._is_fresh(rate_record):
             return rate_record.rate
-        
-        new_rate = self.fetch_from_api(from_currency, to_currency)
-        if rate_record:
-            rate_record.rate = new_rate
-            rate_record.last_updated = datetime.now(timezone.utc)
-        else:
-            rate_record = ExchangeRate(
-                base_currency = from_currency,
-                target_currency = to_currency,
-                rate = new_rate,
-                last_updated = datetime.now(timezone.utc)
-            )
-            db.session.add(rate_record)
-        
+
+        # Stale or missing: one /latest/{from} call refreshes every pair off this
+        # base (and their reciprocals), so a single request covers both directions.
+        self._refresh_rates(from_currency)
+
+        rate_record = ExchangeRate.query.filter_by(
+            base_currency=from_currency, target_currency=to_currency
+        ).first()
+        if not rate_record:
+            raise DataNotFound("Exchange rate not available for this currency pair")
+        return rate_record.rate
+
+    def _is_fresh(self, rate_record):
+        now = datetime.now(timezone.utc)
+        if rate_record.next_update:
+            # Fresh until the provider's own next update — refetch right after it.
+            return now < rate_record.next_update
+        # No next_update on this row: fall back to a fixed TTL from last fetch.
+        return rate_record.last_updated > now - timedelta(hours=EXCHANGE_RATE_TTL_HOURS)
+
+    def _refresh_rates(self, base_currency):
+        """Fetch /latest/{base_currency} and upsert every supported pair (plus
+        the reciprocal of each) so both directions are cached from one call."""
+        rates, next_update = self.fetch_latest(base_currency)
+        for target in WalletCurrencyType:
+            if target == base_currency:
+                continue
+            if target.value not in rates:
+                continue
+            rate = Decimal(str(rates[target.value]))
+            self._upsert_rate(base_currency, target, rate, next_update)
+            # Derive the reverse direction locally instead of spending a call on it.
+            if rate > 0:
+                self._upsert_rate(target, base_currency, Decimal(1) / rate, next_update)
         db.session.commit()
-        return new_rate
-        
-    def fetch_from_api(self, from_currency, to_currency):
+
+    def _upsert_rate(self, base, target, rate, next_update):
+        now = datetime.now(timezone.utc)
+        record = ExchangeRate.query.filter_by(
+            base_currency=base, target_currency=target
+        ).first()
+        if record:
+            record.rate = rate
+            record.last_updated = now
+            record.next_update = next_update
+        else:
+            db.session.add(ExchangeRate(
+                base_currency=base,
+                target_currency=target,
+                rate=rate,
+                last_updated=now,
+                next_update=next_update,
+            ))
+
+    def fetch_latest(self, base_currency):
+        """Return (conversion_rates dict, next_update datetime|None) for a base."""
         try:
-            url = f"{EXCHANGE_RATE_API}/{from_currency.value}/{to_currency.value}"
+            url = ExchangeRateAPI.latest_url(base_currency.value)
             response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
             data = response.json()
             if data.get("result") != "success":
-                raise DataNotFound("Failed to fetch exchange rate")
-            # Return Decimal so it composes with the Numeric balance/amount math.
-            return Decimal(str(data.get("conversion_rate")))
+                raise DataNotFound("Failed to fetch exchange rates")
+            rates = data.get("conversion_rates", {})
+            next_update = None
+            ts = data.get("time_next_update_unix")
+            if ts:
+                next_update = datetime.fromtimestamp(ts, tz=timezone.utc)
+            return rates, next_update
         except DataNotFound:
             raise
         except Exception as e:
-            raise ValueError(f"Error fetching exchange rate: {str(e)}")
+            raise ValueError(f"Error fetching exchange rates: {str(e)}")
         
         
     def get_user_wallets(self, user_id):
