@@ -24,6 +24,30 @@ jwt = JWTManager()
 logger = logging.getLogger(__name__)
 
 
+def env_flag(name, default):
+    """Read a boolean env var tolerantly.
+
+    Values pasted into a hosting dashboard often carry stray whitespace or
+    differing case ("True ", " true"), which a bare == "true" silently reads as
+    False — the setting appears set but does nothing. Strip before comparing.
+    """
+    return os.getenv(name, default).strip().lower() in ("true", "1", "yes")
+
+
+def env_int(name, default):
+    """Read an integer env var without letting a typo take the service down.
+
+    A non-numeric value here would raise inside create_app(), so the container
+    would crash-loop on boot rather than start with a wrong-but-safe default.
+    """
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; falling back to %d", name, raw, default)
+        return default
+
+
 class DecimalJSONProvider(DefaultJSONProvider):
     """Serialize Decimal (money columns are now Numeric/Decimal) as JSON numbers.
 
@@ -132,18 +156,21 @@ def create_app():
     app.json = DecimalJSONProvider(app)
 
     # --- Trusted proxy configuration -------------------------------------
-    # Number of reverse proxies in front of this app:
-    #   1 = Render only (its load balancer)
-    #   2 = Cloudflare (proxied/orange cloud) -> Render
+    # Number of reverse proxies in front of this app. MEASURED, not assumed --
+    # Render contributes TWO hops of its own, not one:
+    #   2 = Render only (DNS-only / grey cloud)
+    #   3 = Cloudflare proxied (orange cloud) -> Render
+    # Confirm with LOG_CLIENT_IP=true rather than trusting these numbers; a
+    # platform can change its internal topology.
     #
     # ProxyFix reads the Nth X-Forwarded-For entry FROM THE RIGHT, so this must
     # match the real topology. Setting it too high is a security bug, not a
     # cosmetic one: the extra entry is attacker-controlled, so a client could
-    # forge its own IP and walk straight past the rate limiter. Defaults to 1
-    # because that fails safe — if Cloudflare is added and this isn't bumped,
-    # every client collapses onto Cloudflare's edge IP (over-restrictive)
-    # rather than becoming spoofable.
-    trusted_hops = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
+    # forge its own IP and walk straight past the rate limiter. The default of
+    # 1 deliberately under-trusts: too low means everyone collapses onto one
+    # infrastructure address (over-restrictive, and obvious in testing), while
+    # too high is silently exploitable. Prefer erring low.
+    trusted_hops = env_int("TRUSTED_PROXY_HOPS", 1)
     # x_proto so request.is_secure reflects the original HTTPS request rather
     # than the plaintext hop inside Render's network. x_host/x_port are left
     # untrusted: nothing here needs them, and each trusted header is one more
@@ -159,9 +186,9 @@ def create_app():
     
     # Connect to Postgresql running in Docker
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI")
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS", "False").lower() == "true"
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = env_flag("SQLALCHEMY_TRACK_MODIFICATIONS", "False")
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "6")))
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=env_int("JWT_ACCESS_TOKEN_EXPIRES", 6))
     app.config["JWT_BLACKLIST_ENABLED"] = True  # Enable token blacklisting
     app.config["JWT_BLACKLIST_TOKEN_CHECKS"] = ["access", "refresh"]
 
@@ -171,7 +198,7 @@ def create_app():
     # toluwalase.me), so SameSite=Lax works and no third-party-cookie issues apply.
     app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
     # Secure=True in prod (HTTPS). Overridable so local dev over http:// can set it False.
-    app.config["JWT_COOKIE_SECURE"] = os.getenv("JWT_COOKIE_SECURE", "True").lower() == "true"
+    app.config["JWT_COOKIE_SECURE"] = env_flag("JWT_COOKIE_SECURE", "True")
     app.config["JWT_COOKIE_SAMESITE"] = os.getenv("JWT_COOKIE_SAMESITE", "Lax")
     # Double-submit CSRF: a JS-readable csrf cookie must be echoed as a header on
     # state-changing requests. Protects the cookie-auth'd endpoints against CSRF.
@@ -201,7 +228,7 @@ def create_app():
     # (e.g. your phone on mobile data), and check that the logged remote_addr
     # matches that network's public IP. Turn it back off afterwards — this logs
     # a client identifier on every request.
-    if os.getenv("LOG_CLIENT_IP", "false").lower() == "true":
+    if env_flag("LOG_CLIENT_IP", "false"):
         @app.before_request
         def log_client_ip():
             logger.info(
@@ -278,7 +305,7 @@ def create_app():
     # have been applied. It's gated so `flask db ...` CLI commands (which set
     # RUN_BACKGROUND_JOBS=false) can build the app without triggering any of it,
     # and so extra web workers/instances don't duplicate the scheduler/websocket.
-    if os.getenv("RUN_BACKGROUND_JOBS", "true").lower() == "true":
+    if env_flag("RUN_BACKGROUND_JOBS", "true"):
         with app.app_context():
             create_admin()
 
