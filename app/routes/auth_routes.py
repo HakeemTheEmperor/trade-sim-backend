@@ -7,6 +7,7 @@ from flask_jwt_extended import (
     unset_jwt_cookies,
 )
 import os
+from ..models.user import UserRoles
 from ..services.auth_service import AuthService
 from ..utils.auth_utils import role_required
 from ..utils.rate_limit import rate_limit
@@ -15,18 +16,21 @@ bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 auth_service = AuthService()
 
 @bp.route("/admin-signup", methods=['POST'])
-@role_required('SUPERADMIN')
+@role_required(UserRoles.SUPER_ADMIN.value)
 def admin_create():
     data = request.get_json()
     required_fields = ["first_name", "last_name", "email", "password", "username"]
-    if not data or not all(key in data for key in ["first_name", "last_name", "email", "password"]):
-        return jsonify({"error": "Missing required fields (first_name, last_name, email, password)"}), 400
-    
+    if not data or not all(key in data and data[key].strip() for key in required_fields):
+        return jsonify({"error": f"Missing or invalid required fields ({', '.join(required_fields)})"}), 400
+
+    cleaned_data = {key: data[key].strip() for key in required_fields}
+
     new_user = auth_service.admin_signup(
-        first_name=data["first_name"],
-        last_name=data["last_name"],
-        email=data["email"],
-        password=data["password"]
+        first_name=cleaned_data["first_name"],
+        last_name=cleaned_data["last_name"],
+        email=cleaned_data["email"],
+        password=cleaned_data["password"],
+        username=cleaned_data["username"]
     )
     return jsonify({"message": "Admin created successfully", "user": new_user}), 201
 
@@ -41,24 +45,22 @@ def user_signup():
     # Strip extra whitespaces from all values
     cleaned_data = {key: data[key].strip() for key in required_fields}
     
-    try:
-        new_user = auth_service.create_user(
-            first_name=cleaned_data["first_name"],
-            last_name=cleaned_data["last_name"],
-            email=cleaned_data["email"],
-            password=cleaned_data["password"],
-            username=cleaned_data["username"]
-        )
-        access_token = auth_service.generate_token(new_user)
-        # Token goes into an HttpOnly cookie (set_access_cookies), not the body.
-        response = jsonify({
-            "message": "User created successfully",
-            "user": new_user.to_dict()})
-        set_access_cookies(response, access_token)
-        return response, 201
-    except ValueError as e:
-        raise
-    
+    new_user = auth_service.create_user(
+        first_name=cleaned_data["first_name"],
+        last_name=cleaned_data["last_name"],
+        email=cleaned_data["email"],
+        password=cleaned_data["password"],
+        username=cleaned_data["username"]
+    )
+    access_token = auth_service.generate_token(new_user)
+    # Token goes into an HttpOnly cookie (set_access_cookies), not the body.
+    response = jsonify({
+        "message": "User created successfully",
+        "user": new_user.to_dict()})
+    set_access_cookies(response, access_token)
+    return response, 201
+
+
 @bp.route('/signin', methods=['POST'])
 @rate_limit(max_requests=5, window_seconds=60)
 def signin():
@@ -108,6 +110,9 @@ def logout():
 
 @bp.route("/reset-password", methods=["POST"])
 @jwt_required()
+# Accepts old_password, so this has the same brute-force surface as /signin and
+# needs the same protection. Keyed by user id (see rate_limit._client_key).
+@rate_limit(max_requests=5, window_seconds=300)
 def reset_password():
     jti = get_jwt()["jti"]
     user_id = get_jwt_identity()

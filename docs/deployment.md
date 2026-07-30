@@ -251,6 +251,23 @@ Put both under `toluwalase.me`:
 `VITE_API_BASE_URL` is baked into the bundle at build time, so **redeploy the
 frontend** after changing it — setting the variable alone does nothing.
 
+### Locking traffic to the custom domain
+
+Once the custom domain is verified and serving, you can turn off Render's
+default URL: **Settings → Custom Domains → Render Subdomain → Disabled**.
+Requests to `<service>.onrender.com` then receive a 404 at Render's edge without
+reaching your app. It's reversible at any time.
+
+Do it in this order, because the failure mode is quiet:
+
+1. Confirm `https://api.imockmarket.toluwalase.me/health` returns `{"status":"ok"}`.
+2. **Repoint UptimeRobot at the custom domain first.** A monitor still pointed at
+   `.onrender.com` when you disable it will 404 forever — which means false
+   alerts, and no keep-alive traffic, so Render sleeps and Supabase pauses after
+   a week.
+3. Confirm the frontend has been rebuilt with the new `VITE_API_BASE_URL`.
+4. Then disable the subdomain.
+
 ### Option B — cross-site cookies (fallback)
 
 If you keep `.vercel.app` / `.onrender.com`, set `JWT_COOKIE_SAMESITE=None` and

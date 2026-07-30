@@ -38,7 +38,7 @@ The application is containerized using Docker, so you don’t need to install Py
 
 ```bash
 git clone https://github.com/HakeemTheEmperor/trade-sim-backend.git
-cd stock-trade-sims
+cd trade-sim-backend
 ```
 
 2. Build and Run the Application:

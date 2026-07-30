@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..services.stocks_service import StocksService
+from ..utils.rate_limit import rate_limit
 
 bp = Blueprint("stocks", __name__, url_prefix="/api/v1/stocks")
 stocks_service = StocksService()
@@ -67,6 +68,10 @@ def get_stock_price(symbol):
 
 @bp.route("/buy", methods=["POST"])
 @jwt_required()
+# Below @jwt_required so unauthenticated callers are rejected without consuming
+# a slot, and so the limiter can key on the (already verified) user id.
+# Generous for real trading; bounds a runaway client against a free-tier DB.
+@rate_limit(max_requests=30, window_seconds=60)
 def buy_stock():
     user_id = get_jwt_identity()
     data = request.get_json()
@@ -80,6 +85,7 @@ def buy_stock():
 
 @bp.route("/sell", methods=["POST"])
 @jwt_required()
+@rate_limit(max_requests=30, window_seconds=60)
 def sell_stock():
     user_id = get_jwt_identity()
     data = request.get_json()

@@ -110,7 +110,3 @@ class WebSocketListener:
             self.thread = None
             self.flush_buffer_to_db()  # Flush any remaining updates
             logger.info("WebSocket listener stopped")
-
-    def update_stock_price(self, symbol, price):
-        # Kept for reference, but not used directly now
-        pass

@@ -2,7 +2,7 @@ from flask_jwt_extended import create_access_token
 from sqlalchemy.exc import IntegrityError
 
 from app.custom_exceptions import AlreadyExists, MissingProperties
-from ..models.user import User
+from ..models.user import User, UserRoles
 from ..models.wallet import Wallet, WalletCurrencyType
 from ..models.revokedtoken import RevokedToken
 from .. import db
@@ -61,16 +61,20 @@ class AuthService:
             db.session.rollback()
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
     
-    def admin_signup(self, first_name, last_name, email, password):
+    def admin_signup(self, first_name, last_name, email, password, username):
         try:
             existing_user = User.query.filter_by(email= email).first()
             if existing_user:
                 raise AlreadyExists("A user with this email already exists")
+            existing_username = User.query.filter_by(username=username).first()
+            if existing_username:
+                raise AlreadyExists("A user with this username already exists")
             new_user = User(
                 first_name = first_name,
                 last_name = last_name,
+                username = username,
                 email = email,
-                role="ADMIN"
+                role=UserRoles.ADMIN
             )
             new_user.set_password(password)
             db.session.add(new_user)

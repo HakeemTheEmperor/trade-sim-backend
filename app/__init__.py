@@ -1,7 +1,7 @@
 import atexit
 import logging
 from decimal import Decimal
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -9,6 +9,7 @@ from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
+from werkzeug.middleware.proxy_fix import ProxyFix
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import os
@@ -77,15 +78,6 @@ def create_admin():
     else:
         logger.info("Admin user already exists")
 
-def seed_available_stock():
-    from .models.stock_available import AvailableStocks
-    default_symbols = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOG", "META", "BRK-B", "TSM", "TSLA", "WMT", "JPM", "V", "MA", "ORCL", "UNH", "XOM", "NFLX", "PG", "HD", "KO", "TMUS", "CVX", "NESN.SW", "005930.KS", "TM", "PM", "IBM", "MCD", "AXP", "DIS", "SHEL", "GS", "ADBE", "SIE.DE", "CAT", "CBA.AX", "XIACF", "UBER", "SONY", "SHOP", "UL", "TTE", "SBUX", "SPOT", "NKE", "INTC", "UPS", "RACE", "ABNB"]
-    for symbol in default_symbols:
-        if not AvailableStocks.query.filter_by(symbol=symbol).first():
-            db.session.add(AvailableStocks(symbol=symbol))
-    db.session.commit()
-    logger.info("Default available symbols seeded")
-
 def run_initial_seed(app):
     """Populate stocks and price history, but only if the tables are empty.
 
@@ -139,6 +131,26 @@ def create_app():
     app = Flask(__name__)
     app.json = DecimalJSONProvider(app)
 
+    # --- Trusted proxy configuration -------------------------------------
+    # Number of reverse proxies in front of this app:
+    #   1 = Render only (its load balancer)
+    #   2 = Cloudflare (proxied/orange cloud) -> Render
+    #
+    # ProxyFix reads the Nth X-Forwarded-For entry FROM THE RIGHT, so this must
+    # match the real topology. Setting it too high is a security bug, not a
+    # cosmetic one: the extra entry is attacker-controlled, so a client could
+    # forge its own IP and walk straight past the rate limiter. Defaults to 1
+    # because that fails safe — if Cloudflare is added and this isn't bumped,
+    # every client collapses onto Cloudflare's edge IP (over-restrictive)
+    # rather than becoming spoofable.
+    trusted_hops = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
+    # x_proto so request.is_secure reflects the original HTTPS request rather
+    # than the plaintext hop inside Render's network. x_host/x_port are left
+    # untrusted: nothing here needs them, and each trusted header is one more
+    # value a client can influence.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_hops, x_proto=trusted_hops)
+    logger.info("ProxyFix enabled, trusting %d proxy hop(s)", trusted_hops)
+
     SWAGGER_URL = os.getenv("SWAGGER_URL")
     API_URL = os.getenv("API_URL")
     
@@ -183,6 +195,21 @@ def create_app():
         if origin.strip()
     ]
     CORS(app, resources={r"/*": {"origins": cors_origins}}, supports_credentials=True)
+
+    # Diagnostic for confirming TRUSTED_PROXY_HOPS is correct. Off by default;
+    # set LOG_CLIENT_IP=true on Render, hit an endpoint from a known network
+    # (e.g. your phone on mobile data), and check that the logged remote_addr
+    # matches that network's public IP. Turn it back off afterwards — this logs
+    # a client identifier on every request.
+    if os.getenv("LOG_CLIENT_IP", "false").lower() == "true":
+        @app.before_request
+        def log_client_ip():
+            logger.info(
+                "client-ip diagnostic: remote_addr=%s x-forwarded-for=%r path=%s",
+                request.remote_addr,
+                request.headers.get("X-Forwarded-For"),
+                request.path,
+            )
 
     @app.after_request
     def set_security_headers(response):
