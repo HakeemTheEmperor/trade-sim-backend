@@ -86,6 +86,48 @@ def seed_available_stock():
     db.session.commit()
     logger.info("Default available symbols seeded")
 
+def run_initial_seed(app):
+    """Populate stocks and price history, but only if the tables are empty.
+
+    Both jobs are re-run nightly by the scheduler and prices also stream in over
+    the Finnhub websocket, so on boot they only need to fill a fresh database.
+    Re-seeding every start would otherwise spend ~45 FMP requests per boot (out
+    of 250/day on the free tier) to write data that's already there.
+
+    Runs on a background thread because a first seed takes ~15 minutes:
+    update_price_history sleeps 20s between symbols for Polygon's rate limit,
+    which is far longer than gunicorn's worker-boot timeout.
+
+    Trade-off: a newly added symbol in DataSeed's default list won't appear
+    until the nightly job runs, since a non-empty table skips the boot seed.
+    """
+    from .data_seed import DataSeed
+    from .models.stock_available import AvailableStocks
+    from .models.stock_history import StockHistory
+    from .utils.update_history import UpdateHistory
+
+    try:
+        with app.app_context():
+            needs_stocks = AvailableStocks.query.first() is None
+            needs_history = StockHistory.query.first() is None
+
+        if needs_stocks:
+            logger.info("No available stocks found; running initial stock seed")
+            DataSeed.load_available_stocks(app)
+        else:
+            logger.info("Available stocks already seeded; skipping initial stock seed")
+
+        if needs_history:
+            logger.info("No price history found; running initial history backfill")
+            UpdateHistory().update_price_history(app)
+        else:
+            logger.info("Price history already present; skipping initial backfill")
+    except Exception:
+        # Never let a seeding failure take down the thread silently — the app
+        # itself stays up and the nightly scheduler job will retry.
+        logger.exception("Initial seed failed; nightly scheduler job will retry")
+
+
 def create_app():
     load_dotenv()
 
@@ -152,6 +194,15 @@ def create_app():
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
+    # Uptime/health probe. Runs SELECT 1 so each ping is real database activity:
+    # keeps the Render free instance from idling AND counts as usage for
+    # Supabase's free-tier inactivity pause.
+    @app.get("/health")
+    def health():
+        from sqlalchemy import text
+        db.session.execute(text("SELECT 1"))
+        return jsonify({"status": "ok"})
+
     # Import models to ensure they're mapped
     from .models.user import User
     from .models.transactions import Transaction
@@ -204,18 +255,21 @@ def create_app():
         with app.app_context():
             create_admin()
 
-            update_history = UpdateHistory()
-            DataSeed.load_available_stocks(app)
-            update_history.update_price_history(app)
+        # Seeding runs off the main thread so gunicorn can bind its port and
+        # start serving immediately (see run_initial_seed for why it's slow).
+        threading.Thread(
+            target=run_initial_seed, args=[app], name="initial-seed", daemon=True
+        ).start()
 
-            scheduler = BackgroundScheduler()
-            scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
-            scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
-            scheduler.start()
-            atexit.register(lambda: scheduler.shutdown())
+        update_history = UpdateHistory()
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
+        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
+        scheduler.start()
+        atexit.register(lambda: scheduler.shutdown())
 
-            websocket_listener = WebSocketListener(app)
-            websocket_listener.start()
+        websocket_listener = WebSocketListener(app)
+        websocket_listener.start()
     else:
         logger.info("RUN_BACKGROUND_JOBS is disabled; skipping DB startup work (admin/seed/scheduler/websocket)")
 

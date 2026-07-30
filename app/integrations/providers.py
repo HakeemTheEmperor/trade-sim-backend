@@ -27,11 +27,15 @@ class FMP:
 
 
 class Polygon:
-    """Polygon.io — daily price history (aggregates)."""
+    """Massive (formerly Polygon.io) — daily price history (aggregates).
+
+    api.polygon.io still resolves and is kept working in parallel, but
+    api.massive.com is the current default.
+    """
 
     @staticmethod
     def base():
-        return os.getenv("POLYGON_BASE_URL", "https://api.massive.com ")
+        return os.getenv("POLYGON_BASE_URL", "https://api.massive.com")
 
     @staticmethod
     def daily_aggs_url(symbol, start_date, end_date, limit=120):

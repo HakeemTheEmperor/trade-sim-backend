@@ -12,4 +12,5 @@ RUN_BACKGROUND_JOBS=false pipenv run flask db upgrade
 # APScheduler jobs and the Finnhub websocket listener are started inside
 # create_app(), so more than one worker would duplicate them. Threads provide
 # in-process request concurrency.
-exec pipenv run gunicorn --bind 0.0.0.0:5000 --workers 1 --threads 4 --timeout 120 app.index:app
+# Bind to $PORT when the platform provides one (e.g. Render); default 5000 locally.
+exec pipenv run gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 120 app.index:app
