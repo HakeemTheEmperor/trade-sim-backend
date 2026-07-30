@@ -341,5 +341,6 @@ plaintext.
 | Login works, POSTs 401 | Missing `X-CSRF-TOKEN` header, or cross-site cookie dropped (see step 4) |
 | Only AAPL prices update live | Websocket started before the seed — restart the service (step 3.5) |
 | `/api/v1/stocks` empty long after deploy | Seed thread failed; search logs for `Initial seed failed` |
+| `NotNullViolation` on `available_stocks` during seed | A provider field came back `None`. The seed now skips such symbols and logs `Skipping <SYM>, provider omitted: ...` — check whether FMP renamed a field |
 | Price history empty, everything else fine | Massive/Polygon key invalid or rate-limited; check `Failed to update price history` |
 | Everything 503 after a week away | Supabase project paused — unpause in the dashboard, then check the uptime monitor |
