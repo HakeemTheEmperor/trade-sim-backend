@@ -15,7 +15,12 @@ class User(db.Model):
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
     
-    password_hash = db.Column(db.String(255), nullable=False) 
+    password_hash = db.Column(db.String(255), nullable=False)
+    # Set only once the user proves the address is reachable by entering the
+    # emailed OTP. Signup issues no session while this is False, and /signin
+    # refuses (see verify_email in services/auth_service.py). Pre-existing
+    # accounts were backfilled to True by the migration that added the column.
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
     role = db.Column(db.Enum(UserRoles), default=UserRoles.USER, nullable=False)
@@ -43,6 +48,7 @@ class User(db.Model):
             "username": self.username,
             "email": self.email,
             "role": self.role.value,
+            "is_verified": self.is_verified,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "phone_number": self.phone_number,

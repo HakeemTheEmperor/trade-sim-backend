@@ -72,3 +72,33 @@ class ExchangeRate:
     @staticmethod
     def latest_url(base_currency):
         return f"{ExchangeRate.base()}/latest/{base_currency}"
+
+
+class Brevo:
+    """Brevo (ex-Sendinblue) — transactional email (OTP delivery).
+
+    The key goes in an ``api-key`` header rather than the query string, so unlike
+    the price providers above the URL helper carries no secret. Sending requires
+    a sender that Brevo has verified (a confirmed address or an authenticated
+    domain); an unverified sender is accepted by the API and then silently not
+    delivered, so verify it in the dashboard before relying on this.
+    """
+
+    @staticmethod
+    def base():
+        return os.getenv("BREVO_BASE_URL", "https://api.brevo.com/v3")
+
+    @staticmethod
+    def send_email_url():
+        return f"{Brevo.base()}/smtp/email"
+
+    @staticmethod
+    def api_key():
+        return os.getenv("BREVO_API_KEY")
+
+    @staticmethod
+    def sender():
+        return {
+            "name": os.getenv("BREVO_SENDER_NAME", "iMockMarket"),
+            "email": os.getenv("BREVO_SENDER_EMAIL"),
+        }

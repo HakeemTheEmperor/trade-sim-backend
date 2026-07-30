@@ -151,6 +151,13 @@ components:
         role:
           type: string
           example: "USER"
+        is_verified:
+          type: boolean
+          description: >
+            Whether the user has confirmed their email with the signup OTP.
+            Always true on any user returned by an authenticated endpoint — a
+            session is only ever issued to a verified account.
+          example: true
         updated_at:
           type: string
           format: date-time
@@ -159,6 +166,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Wallet"
+
+    RateLimited:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Too many requests. Please slow down and try again later.
+        status:
+          type: string
+          example: RATE LIMIT EXCEEDED
+        status_code:
+          type: integer
+          example: 429
 
     Transaction:
       type: object
@@ -225,8 +245,11 @@ paths:
   /auth/signup:
     post:
       operationId: authSignupUser
-      summary: User account gets created
-      description: User Signup to the Stock Trade App
+      summary: User account gets created (unverified)
+      description: >
+        Creates the account and emails a 6-digit verification code. No session
+        is issued: the account is inactive and /auth/signin will refuse it until
+        the code is submitted to /auth/verify-email.
       tags:
         - Auth
       requestBody:
@@ -243,13 +266,18 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: User created successfully
-                  token:
+                    example: Account created. Enter the 6-digit code we emailed you to activate it.
+                  email:
                     type: string
-                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  user:
-                    $ref: "#/components/schemas/User"
-          description: Successfully created
+                    format: email
+                    example: hakeemtheemperor@gmail.com
+                  verification_required:
+                    type: boolean
+                    example: true
+                  status:
+                    type: string
+                    example: VERIFICATION REQUIRED
+          description: Created; awaiting email verification. No cookie is set.
         "400":
           content:
             application/json:
@@ -304,13 +332,12 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Signin Successful
-                  token:
-                    type: string
-                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    example: Sign-in successful
                   user:
                     $ref: "#/components/schemas/User"
-          description: Successfully signed in
+          description: >
+            Successfully signed in. The JWT is set as an HttpOnly cookie, not
+            returned in the body.
         "400":
           content:
             application/json:
@@ -323,6 +350,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/InvalidApiKey"
           description: Invalid Api Key entered
+        "403":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Your account has not been verified.
+                  status:
+                    type: string
+                    example: ACCOUNT_UNVERIFIED
+                  email:
+                    type: string
+                    format: email
+                    example: hakeemtheemperor@gmail.com
+          description: >
+            The password was correct but the account has never been verified.
+            No cookie is set. Clients should branch on `status`, not the message,
+            and send the user to the verification page. Only returned after a
+            correct password, so it discloses nothing to a caller who does not
+            already hold the credentials.
         "409":
           content:
             application/json:
@@ -335,6 +384,135 @@ paths:
               schema:
                 $ref: "#/components/schemas/RuntimeError"
           description: Unexpected error occured
+
+  /auth/verify-email:
+    post:
+      operationId: authVerifyEmail
+      summary: Activate an account with the emailed OTP
+      description: >
+        Submits the 6-digit code emailed at signup. On success the account is
+        marked verified AND signed in — the JWT and CSRF cookies are set, so no
+        separate /auth/signin call is needed.
+
+
+        Codes expire after 10 minutes, allow 5 attempts, and are single use.
+        Issuing a new code invalidates the previous one. Every failure mode
+        (wrong code, expired code, exhausted attempts, unknown email) returns the
+        same 400 message on purpose: this endpoint takes no password, so it must
+        not reveal whether an account exists.
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: hakeemtheemperor@gmail.com
+                otp:
+                  type: string
+                  example: "482913"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Email verified successfully
+                  user:
+                    $ref: "#/components/schemas/User"
+          description: >
+            Verified and signed in. Sets the access and CSRF cookies. An
+            already-verified account also returns 200 (idempotent no-op) so a
+            double-submitted form doesn't read as a failure.
+        "400":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Invalid or expired code. Request a new one and try again.
+                  status:
+                    type: string
+                    example: Value Error
+                  error_code:
+                    type: integer
+                    example: 400
+          description: Missing fields, or an invalid/expired/exhausted code
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimited"
+          description: Too many attempts (10 per 5 minutes per client)
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeError"
+          description: Unexpected error occured
+
+  /auth/resend-otp:
+    post:
+      operationId: authResendOtp
+      summary: Re-send the signup verification code
+      description: >
+        Issues a new code and emails it, invalidating any previous code.
+
+
+        Always returns 200 with a fixed message. An unknown address, an
+        already-verified account and an active 60-second cooldown are all
+        indistinguishable from the response — without a password to authenticate
+        the caller, anything else would make this a free account-enumeration
+        endpoint.
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: hakeemtheemperor@gmail.com
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: If that account exists and is unverified, a new code has been sent.
+          description: Request accepted (whether or not an email was actually sent)
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingProperties"
+          description: The email field is missing or empty
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimited"
+          description: Too many requests (3 per 5 minutes per client)
 
   /auth/logout:
     get:

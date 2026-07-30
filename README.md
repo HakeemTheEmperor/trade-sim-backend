@@ -59,6 +59,21 @@ cd trade-sim-backend
    docker-compose down -v
    ```
 
+## EMAIL VERIFICATION
+
+Signup emails a 6-digit code and the account stays inactive until it's entered,
+so the flow needs an email provider (Brevo). Set these in `.env`:
+
+| Variable | Notes |
+|---|---|
+| `BREVO_API_KEY` | Brevo v3 API key. **Leave it unset locally** — the code is then written to the server log instead of being emailed, so you can verify accounts without a provider account. |
+| `BREVO_SENDER_EMAIL` | required once `BREVO_API_KEY` is set; must be a sender Brevo has verified |
+| `BREVO_SENDER_NAME` | optional, defaults to `iMockMarket` |
+
+Full write-up — the OTP parameters, why there's no unverified session, and what
+each endpoint deliberately does and doesn't reveal — is in
+[docs/email-verification.md](docs/email-verification.md).
+
 ## DEVELOPMENT DETAILS
 
 The api was built using Python's Flask framework, by a developer who was just learning flask, so cut me some slack okay. It uses a Postgreql Database running on docker. BYE

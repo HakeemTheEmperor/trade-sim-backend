@@ -19,6 +19,7 @@ You need accounts on Supabase, Render, Vercel, and UptimeRobot, plus API keys fo
 | Finnhub | `FINNHUB_API_KEY` | websocket, 1 connection |
 | Massive (formerly Polygon.io) | `POLYGON_API_KEY` | 5 requests/min — this is why the backfill sleeps 20s per symbol |
 | exchangerate-api.com | `EXCHANGE_RATE_API` | daily updates; app caches to ~1 request/day |
+| Brevo (transactional email) | `BREVO_API_KEY` | 300 emails/day. Only used for signup OTPs, so ~1 per new user |
 
 Generate a JWT secret now, you'll need it in step 2:
 
@@ -160,11 +161,15 @@ code — the app will crash on startup without them.
 | `FINNHUB_WS_URL` | `wss://ws.finnhub.io` | |
 | `POLYGON_API_KEY` | your Massive/Polygon key | |
 | `EXCHANGE_RATE_API` | `https://v6.exchangerate-api.com/v6/<your-key>` | no trailing `/latest` or `/pair` |
+| `BREVO_API_KEY` | your Brevo v3 API key | **required in production** — without it signup OTPs are only written to the log, so nobody can verify. See `docs/email-verification.md` |
+| `BREVO_SENDER_EMAIL` | `no-reply@imockmarket.toluwalase.me` | must be a sender Brevo has verified, or mail is accepted and silently dropped |
+| `BREVO_SENDER_NAME` | `iMockMarket` | optional, defaults to `iMockMarket` |
 
 Do **not** set `PORT` — Render injects it, and `bootstrap.sh` reads it.
 
-Leave `POLYGON_BASE_URL` and `FMP_BASE_URL` unset unless you're pointing at a
-sandbox; the defaults in `app/integrations/providers.py` are correct.
+Leave `POLYGON_BASE_URL`, `FMP_BASE_URL`, and `BREVO_BASE_URL` unset unless
+you're pointing at a sandbox; the defaults in `app/integrations/providers.py`
+are correct.
 
 ### 3.3 First deploy
 

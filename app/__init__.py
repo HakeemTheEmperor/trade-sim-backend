@@ -93,7 +93,10 @@ def create_admin():
             first_name="Super",
             last_name="Admin",
             username="Supes",
-            role=UserRoles.SUPER_ADMIN
+            role=UserRoles.SUPER_ADMIN,
+            # Seeded from env, never through the signup/OTP path — without this
+            # the super-admin could never sign in.
+            is_verified=True
         )
         admin_user.set_password(admin_password)
         db.session.add(admin_user)
@@ -269,6 +272,7 @@ def create_app():
     from .models.watch_list import WatchList
     from .models.shadow_link import ShadowLink
     from .models.notification import Notification
+    from .models.email_otp import EmailVerificationCode
     from .data_seed import DataSeed
     from .utils.update_history import UpdateHistory
     

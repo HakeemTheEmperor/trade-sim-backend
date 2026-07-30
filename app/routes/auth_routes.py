@@ -52,13 +52,16 @@ def user_signup():
         password=cleaned_data["password"],
         username=cleaned_data["username"]
     )
-    access_token = auth_service.generate_token(new_user)
-    # Token goes into an HttpOnly cookie (set_access_cookies), not the body.
-    response = jsonify({
-        "message": "User created successfully",
-        "user": new_user.to_dict()})
-    set_access_cookies(response, access_token)
-    return response, 201
+    # Deliberately NO session here: create_user has emailed a 6-digit code and
+    # the account stays inactive until it's entered at /verify-email, which is
+    # where the cookie is finally issued. Nothing but the user's own submitted
+    # email is echoed back, so this response leaks nothing.
+    return jsonify({
+        "message": "Account created. Enter the 6-digit code we emailed you to activate it.",
+        "email": new_user.email,
+        "verification_required": True,
+        "status": "VERIFICATION REQUIRED"
+    }), 201
 
 
 @bp.route('/signin', methods=['POST'])
@@ -74,6 +77,16 @@ def signin():
     
     user = auth_service.authenticate_user(cleaned_data['email'], cleaned_data['password'])
     if user:
+        if not user.is_verified:
+            # Reached only after a CORRECT password, so this reveals nothing to
+            # anyone who doesn't already hold the credentials. The client keys
+            # off `status`, never the prose, and the message is kept vague on
+            # purpose. No cookie is set — an unverified account gets no session.
+            return jsonify({
+                "message": "Your account has not been verified.",
+                "status": "ACCOUNT_UNVERIFIED",
+                "email": user.email
+            }), 403
         access_token = auth_service.generate_token(user)
         response = jsonify({
             "message": "Sign-in successful",
@@ -81,6 +94,57 @@ def signin():
         set_access_cookies(response, access_token)
         return response, 200
     return jsonify({'message': 'Invalid email or password'}), 401
+
+
+@bp.route('/verify-email', methods=['POST'])
+# Public (no session exists yet). The per-code attempt cap in
+# EmailVerificationCode.verify is the real brute-force defence; this caps the
+# request volume any one client can generate on top of that.
+@rate_limit(max_requests=10, window_seconds=300)
+def verify_email():
+    data = request.get_json()
+
+    required_fields = ['email', 'otp']
+    if not data or not all(key in data and str(data[key]).strip() for key in required_fields):
+        return jsonify({"error": "Missing or invalid required fields (email, otp)"}), 400
+
+    email = data['email'].strip()
+    otp = str(data['otp']).strip()
+
+    # Raises ValueError -> clean 400 with a single generic message for every
+    # failure mode. See AuthService.verify_email.
+    user, newly_verified = auth_service.verify_email(email, otp)
+
+    # Verification also signs the user in: they just proved control of the
+    # address one step ago, so making them retype the password buys nothing.
+    access_token = auth_service.generate_token(user)
+    response = jsonify({
+        "message": "Email verified successfully" if newly_verified else "Your email is already verified",
+        "user": user.to_dict()
+    })
+    set_access_cookies(response, access_token)
+    return response, 200
+
+
+@bp.route('/resend-otp', methods=['POST'])
+# Tighter than verify-email: this one causes an outbound email, so it's both a
+# spam vector and a drain on the provider's daily quota. Backed by a per-account
+# 60s cooldown that survives restarts (the limiter's counters don't).
+@rate_limit(max_requests=3, window_seconds=300)
+def resend_otp():
+    data = request.get_json()
+
+    if not data or not data.get('email', '').strip():
+        return jsonify({"error": "Missing or invalid required field (email)"}), 400
+
+    auth_service.resend_verification(data['email'].strip())
+
+    # Fixed response, always 200: unknown address, already-verified account and
+    # active cooldown must be indistinguishable, or this becomes a free
+    # account-enumeration endpoint (it takes no password).
+    return jsonify({
+        "message": "If that account exists and is unverified, a new code has been sent."
+    }), 200
 
 
 @bp.route("/me", methods=["GET"])
@@ -95,6 +159,10 @@ def me():
         "last_name": claims.get("last_name"),
         "email": claims.get("email"),
         "role": claims.get("role"),
+        # Tokens predating the verification feature carry no such claim; treat a
+        # missing value as verified, matching how the migration grandfathered
+        # existing accounts.
+        "is_verified": claims.get("is_verified", True),
     }}), 200
 
 @bp.route("/logout", methods=["POST"])
