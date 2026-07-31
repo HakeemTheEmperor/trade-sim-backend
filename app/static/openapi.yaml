@@ -9,8 +9,12 @@ info:
   contact:
     email: hakeemtheemperor@gmail.com
     name: HTE
+# NOTE: this block is REPLACED AT SERVE TIME by the /openapi.yaml route, which
+# substitutes PUBLIC_API_BASE_URL (see api_base_url() in app/__init__.py). Editing
+# the URL here only affects tools that read this file straight off disk — it has
+# no effect on the Swagger UI at $SWAGGER_URL. Keep it pointing at localhost.
 servers:
-  - url: http://127.0.0.1:5000/api/v1
+  - url: http://localhost:5000/api/v1
 components:
   securitySchemes:
     BearerAuth:

@@ -1,7 +1,8 @@
 import atexit
 import logging
+import re
 from decimal import Decimal
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -46,6 +47,34 @@ def env_int(name, default):
     except ValueError:
         logger.warning("%s=%r is not an integer; falling back to %d", name, raw, default)
         return default
+
+
+# Every blueprint is mounted under this prefix, and the OpenAPI paths are written
+# relative to it (`/auth/signin`, not `/api/v1/auth/signin`). Anything handing
+# out a base URL has to include it.
+API_PREFIX = "/api/v1"
+
+
+def api_base_url():
+    """Public base URL clients should call, including the ``/api/v1`` prefix.
+
+    Read from PUBLIC_API_BASE_URL, which should be the bare origin of the
+    deployed API (``https://api-imockmarket.toluwalase.me``). Falls back to
+    localhost on the port bootstrap.sh binds, so local runs work unconfigured.
+
+    The prefix is appended here rather than being the caller's problem: a base
+    URL missing it 404s every endpoint, and in a browser that surfaces as a
+    confusing CORS preflight failure rather than a 404. A value that already
+    ends in the prefix is accepted as-is so pasting the frontend's
+    VITE_API_BASE_URL doesn't produce ``/api/v1/api/v1``.
+    """
+    configured = os.getenv("PUBLIC_API_BASE_URL", "").strip().rstrip("/")
+    if not configured:
+        # Matches bootstrap.sh's `--bind 0.0.0.0:${PORT:-5000}`.
+        configured = f"http://localhost:{os.getenv('PORT', '5000').strip() or '5000'}"
+    if configured.endswith(API_PREFIX):
+        return configured
+    return f"{configured}{API_PREFIX}"
 
 
 class DecimalJSONProvider(DefaultJSONProvider):
@@ -182,8 +211,12 @@ def create_app():
     logger.info("ProxyFix enabled, trusting %d proxy hop(s)", trusted_hops)
 
     SWAGGER_URL = os.getenv("SWAGGER_URL")
-    API_URL = os.getenv("API_URL")
-    
+    # Defaults to the templated route below rather than the raw static file, so
+    # Swagger's "Try it out" targets the deployed host. Pointing this back at
+    # /static/openapi.yaml still works — you just get the file's hardcoded
+    # localhost server, which is the old behaviour.
+    API_URL = os.getenv("API_URL", "/openapi.yaml")
+
     swaggerui_blueprint = get_swaggerui_blueprint(SWAGGER_URL, API_URL, config={"app_name": "Stock Trade Simulator Web Api"})
 
     
@@ -250,6 +283,47 @@ def create_app():
         # over TLS (as it should be); ignored by browsers over plain HTTP.
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
+
+    @app.get("/openapi.yaml")
+    def openapi_spec():
+        """Serve the OpenAPI document with the deployed host substituted in.
+
+        The file on disk carries a localhost `servers:` entry so it stays a
+        valid, directly-usable spec. Served as a static file, that entry is what
+        Swagger UI points "Try it out" at — which is why the deployed docs were
+        firing requests at 127.0.0.1. Rewriting it here keeps env the single
+        source of truth for the host without duplicating it into the YAML.
+
+        Re-read per request: the file is small and this endpoint is human-traffic
+        only, so caching it would trade a real (if minor) footgun — a stale spec
+        after an edit — for nothing that matters.
+        """
+        spec_path = os.path.join(app.static_folder, "openapi.yaml")
+        try:
+            with open(spec_path, encoding="utf-8") as handle:
+                spec = handle.read()
+        except OSError:
+            logger.exception("Could not read the OpenAPI spec at %s", spec_path)
+            return jsonify({"error": "OpenAPI spec unavailable"}), 500
+
+        # Replace the whole servers block (the `servers:` line plus every
+        # indented line under it) with the single configured entry. Collapsing
+        # multiple entries is intended: env is the one source of truth, so a
+        # leftover second server would just be another way to call the wrong host.
+        base_url = api_base_url()
+        spec, replaced = re.subn(
+            r"^servers:\n(?:[ \t]+.*(?:\n|$))*",
+            f"servers:\n  - url: {base_url}\n",
+            spec,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if not replaced:
+            # Don't fail the request over it — a spec with the wrong server is
+            # still far more useful than no docs at all.
+            logger.warning("No servers block found in openapi.yaml; served unmodified")
+
+        return Response(spec, mimetype="application/yaml")
 
     # Uptime/health probe. Runs SELECT 1 so each ping is real database activity:
     # keeps the Render free instance from idling AND counts as usage for

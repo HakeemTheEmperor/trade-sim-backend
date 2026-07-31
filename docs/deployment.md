@@ -146,7 +146,8 @@ code — the app will crash on startup without them.
 | `SQLALCHEMY_DATABASE_URI` | session-pooler URI from 1.2 | **required** |
 | `JWT_SECRET_KEY` | the random string from step 0 | **required** — anyone with it can forge tokens |
 | `SWAGGER_URL` | `/docs` | **required** — read with no default in `create_app()` |
-| `API_URL` | `/static/openapi.yaml` | **required** — same |
+| `API_URL` | `/openapi.yaml` | path to the spec document. Defaults to this; **change it from `/static/openapi.yaml` if you set it earlier** — see below |
+| `PUBLIC_API_BASE_URL` | `https://<your-api-host>` | origin of this API, scheme + host only. Fills the spec's `servers:` entry so Swagger "Try it out" hits the deployed host instead of 127.0.0.1. `/api/v1` is appended for you |
 | `ADMIN_EMAIL` | your admin email | seeds the super-admin on first boot |
 | `ADMIN_PASSWORD` | a strong password | change it after first login |
 | `CORS_ORIGINS` | `https://app.imockmarket.toluwalase.me,http://localhost:5173` | comma-separated, never `*` |
@@ -164,6 +165,15 @@ code — the app will crash on startup without them.
 | `BREVO_API_KEY` | your Brevo v3 API key | **required in production** — without it signup OTPs are only written to the log, so nobody can verify. See `docs/email-verification.md` |
 | `BREVO_SENDER_EMAIL` | `no-reply@imockmarket.toluwalase.me` | must be a sender Brevo has verified, or mail is accepted and silently dropped |
 | `BREVO_SENDER_NAME` | `iMockMarket` | optional, defaults to `iMockMarket` |
+
+**On the Swagger server URL.** `app/static/openapi.yaml` carries a hardcoded
+`servers: - url: http://localhost:5000/api/v1`, so serving it as a static file
+made the deployed docs send every "Try it out" request to the reader's own
+machine. The `/openapi.yaml` route rewrites that entry from
+`PUBLIC_API_BASE_URL` at serve time, keeping env the single source of truth for
+the host. If `API_URL` is still pinned to `/static/openapi.yaml` in your Render
+environment, the docs keep the old localhost behaviour — point it at
+`/openapi.yaml`, or delete the variable and take the default.
 
 Do **not** set `PORT` — Render injects it, and `bootstrap.sh` reads it.
 
@@ -251,7 +261,15 @@ Put both under `toluwalase.me`:
 | Render | `CORS_ORIGINS` | `https://app.imockmarket.toluwalase.me,http://localhost:5173` |
 | Render | `JWT_COOKIE_SAMESITE` | `Lax` |
 | Render | `JWT_COOKIE_SECURE` | `True` |
-| Vercel | `VITE_API_BASE_URL` | `https://api.imockmarket.toluwalase.me` |
+| Vercel | `VITE_API_BASE_URL` | `https://<your-api-host>/api/v1` |
+
+**The `/api/v1` suffix is required.** Every blueprint is mounted under it
+(`url_prefix="/api/v1/auth"` etc.) while the client passes bare paths like
+`/auth/signin`, so a base URL without it 404s every single endpoint. That failure
+reads as a CORS error in the browser, not a 404: the preflight `OPTIONS` hits an
+unmatched route, and Flask-CORS only auto-answers preflights for routes that
+exist. `/health` is the one route registered without the prefix, so it keeps
+returning 200 throughout and makes the base URL look correct.
 
 `VITE_API_BASE_URL` is baked into the bundle at build time, so **redeploy the
 frontend** after changing it — setting the variable alone does nothing.
