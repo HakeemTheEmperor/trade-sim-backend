@@ -41,6 +41,15 @@ class AuthService:
             existing_user = User.query.filter_by(email= email).first()
             if existing_user:
                 raise AlreadyExists("A user with this email already exists")
+            # username is UNIQUE in the schema, so a duplicate was already
+            # rejected — but as an IntegrityError, which the error handler turns
+            # into "Database error, please try again". That reads as a fault on
+            # our side and gives the user nothing to act on, when the fix is
+            # simply to pick another username. Checked explicitly, matching
+            # admin_signup below.
+            existing_username = User.query.filter_by(username=username).first()
+            if existing_username:
+                raise AlreadyExists("A user with this username already exists")
             # Create user
             new_user = User(
                 first_name = first_name,
