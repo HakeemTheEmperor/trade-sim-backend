@@ -7,7 +7,7 @@ from flask_jwt_extended import (
     unset_jwt_cookies,
 )
 import os
-from ..models.user import UserRoles
+from ..models.user import User, UserRoles
 from ..services.auth_service import AuthService
 from ..utils.auth_utils import role_required
 from ..utils.rate_limit import rate_limit
@@ -150,20 +150,24 @@ def resend_otp():
 @bp.route("/me", methods=["GET"])
 @jwt_required()
 def me():
-    # Lets the SPA confirm the session and recover basic identity after a reload,
-    # since the token is no longer readable in JS. Reads the JWT claims (no DB hit).
-    claims = get_jwt()
-    return jsonify({"user": {
-        "id": get_jwt_identity(),
-        "first_name": claims.get("first_name"),
-        "last_name": claims.get("last_name"),
-        "email": claims.get("email"),
-        "role": claims.get("role"),
-        # Tokens predating the verification feature carry no such claim; treat a
-        # missing value as verified, matching how the migration grandfathered
-        # existing accounts.
-        "is_verified": claims.get("is_verified", True),
-    }}), 200
+    # Lets the SPA confirm the session and recover identity after a reload, since
+    # the token is no longer readable in JS.
+    #
+    # Reads the DATABASE, not the JWT claims. Claims are frozen at sign-in, so a
+    # claims-based answer goes stale the moment anything about the user changes
+    # and stays stale for the life of the token (6h) — the client cannot tell,
+    # and neither could we. It also couldn't carry fields added after a token was
+    # issued: username was missing here entirely, and is_verified needed a
+    # default for tokens predating it.
+    #
+    # The cost is one primary-key lookup per call, which is affordable because
+    # the client caches this now rather than refetching on every navigation.
+    user = User.query.get(get_jwt_identity())
+    if user is None:
+        # Valid signature, but the account is gone (deleted). Treat as no session
+        # rather than 500 on the attribute access below.
+        return jsonify({"error": "Account no longer exists."}), 401
+    return jsonify({"user": user.to_dict()}), 200
 
 @bp.route("/logout", methods=["POST"])
 @jwt_required()
