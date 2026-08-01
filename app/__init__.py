@@ -240,6 +240,26 @@ def create_app():
     # state-changing requests. Protects the cookie-auth'd endpoints against CSRF.
     app.config["JWT_COOKIE_CSRF_PROTECT"] = True
     app.config["JWT_ACCESS_COOKIE_PATH"] = "/"
+    # Which domain the cookies are scoped to. Unset means HOST-ONLY: the browser
+    # scopes them to the API's own hostname.
+    #
+    # That breaks the CSRF half of the setup whenever the SPA is served from a
+    # different subdomain, and it breaks it in a confusing way. The access cookie
+    # keeps working — the browser still SENDS a host-only cookie to the host that
+    # set it — so every GET succeeds and the session looks healthy. But the CSRF
+    # cookie has to be READ by JavaScript on the frontend origin, and JS cannot
+    # read a cookie scoped to another host. The header goes missing, the server
+    # answers 401 "Missing CSRF token", and the client treats that as an expired
+    # session and logs the user out. The symptom is "browsing is fine, but any
+    # action logs me out".
+    #
+    # Set this to the shared parent (".toluwalase.me") when FE and BE are on
+    # different subdomains. Leave it unset for local development, where both are
+    # on localhost and cookies are already readable.
+    cookie_domain = os.getenv("JWT_COOKIE_DOMAIN", "").strip()
+    app.config["JWT_COOKIE_DOMAIN"] = cookie_domain or None
+    if cookie_domain:
+        logger.info("JWT cookies scoped to domain %s", cookie_domain)
 
     # Initialize SQLAlchemy
     db.init_app(app)

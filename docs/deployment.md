@@ -260,6 +260,7 @@ Put both under `toluwalase.me`:
 |---|---|---|
 | Render | `CORS_ORIGINS` | `https://app.imockmarket.toluwalase.me,http://localhost:5173` |
 | Render | `JWT_COOKIE_SAMESITE` | `Lax` |
+| Render | `JWT_COOKIE_DOMAIN` | `.toluwalase.me` — **required** with split subdomains, see below |
 | Render | `JWT_COOKIE_SECURE` | `True` |
 | Vercel | `VITE_API_BASE_URL` | `https://<your-api-host>/api/v1` |
 
@@ -297,6 +298,34 @@ If you keep `.vercel.app` / `.onrender.com`, set `JWT_COOKIE_SAMESITE=None` and
 `JWT_COOKIE_SECURE=True`. Understand the cost: Safari blocks third-party cookies
 by default, Chrome's tracking protection may too, and Firefox partitions them.
 Auth will work for some users and mysteriously fail for others. Use Option A.
+
+### Cookie domain — the one that fails quietly
+
+With the frontend and API on different subdomains, `JWT_COOKIE_DOMAIN` must be
+set to the shared parent (`.toluwalase.me`). Left unset, cookies are host-only
+and scoped to the API's hostname.
+
+That half-works, which is what makes it hard to spot. The browser still *sends*
+a host-only cookie to the host that set it, so sign-in succeeds and every GET
+succeeds. But the double-submit CSRF token has to be *read* by JavaScript on the
+frontend origin, and JS cannot read a cookie scoped to another host. The
+`X-CSRF-TOKEN` header is silently omitted, the API returns
+`401 Missing CSRF token`, and the SPA treats any 401 as an expired session and
+logs the user out.
+
+The symptom is **"I can browse fine, but the moment I do anything I get an error
+and get logged out"** — every authenticated POST, PUT and DELETE fails while
+everything read-only looks perfect.
+
+To check from the browser, on the frontend origin:
+
+```js
+document.cookie   // csrf_access_token must appear here
+```
+
+If it doesn't, this is the cause. After setting it, existing host-only cookies
+linger until they expire (6h) and can shadow the new ones — clear site data, or
+sign out and back in, when testing the fix.
 
 ### CSRF note
 
