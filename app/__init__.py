@@ -366,6 +366,7 @@ def create_app():
     from .routes.shadow_routes import bp as shadow_bp
     from .routes.notification_routes import bp as notification_bp
     from .routes.leaderboard_routes import bp as leaderboard_bp
+    from .routes.config_routes import bp as config_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
@@ -376,6 +377,7 @@ def create_app():
     app.register_blueprint(shadow_bp)
     app.register_blueprint(notification_bp)
     app.register_blueprint(leaderboard_bp)
+    app.register_blueprint(config_bp)
     app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
     
 
