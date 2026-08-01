@@ -71,61 +71,93 @@ out to be common, a floor or a seasonal reset is the answer.
 
 ## Leaderboards
 
-Friend boards only. There is no global board, by design: the shadow feature is
-deliberately privacy-preserving (`is_shadow_discoverable` defaults `False`,
-`SHADOW_TRADE` notifications carry no amounts), and a public board showing
-balances would contradict it.
+Rankings live in **named leagues people opt into with a join code**. There is no
+global board.
 
-**Cohort.** You plus everyone you hold an `ACCEPTED` `ShadowLink` with, in
-either direction. Mutual by construction — you only appear on a board with
-someone who agreed to the link. `PENDING` links don't count.
+This replaced an earlier design that built a board from your accepted
+`ShadowLink` connections. That version computed a different cohort per viewer,
+so no two people saw the same table and nobody could talk about "the standings"
+— there weren't any. A league is a shared object: every member sees an identical
+ranking. The shadow graph keeps its actual job (trade notifications); only the
+ranking moved.
 
-**Metric: percentage return, never absolute equity.** The two are equivalent
-today, but absolute breaks the moment baselines differ, and publishing balances
-would breach the privacy rule above. Equity means cash across all wallets
-(converted to USD) plus holdings marked to current prices — not realised P&L,
-which would reward never selling a loser.
+**The privacy trade-off this accepts.** The shadow board only ever exposed your
+return to people you had mutually agreed to link with. A join code exposes it to
+whoever holds the code — and someone will eventually post one publicly.
+Percentages only, never balances, and joining is an explicit act. The caps below
+are what bound the damage.
 
-**Seasons.** Default 90 days (`SEASON_LENGTH_DAYS`). A lifetime board decays
-into a measure of who joined earliest: someone a year ahead has compounded
-longer and a newcomer can't catch up by being better, only by waiting. Quarterly
-gives four fresh starts a year; a year is too long for a friend group's
-attention and too long to recover from a bad start.
+| Setting | Default | Why |
+|---|---|---|
+| `MAX_LEAGUE_MEMBERS` | 50 | Covers any real friend group, course or office team; keeps the table to one screen (no pagination to build); bounds how far a leaked code spreads your return |
+| `MAX_LEAGUES_PER_USER` | 5 | A member cap alone doesn't stop one person joining hundreds, each a set of strangers who can see their return |
+
+Neither is a performance limit — a snapshot-backed table would serve far more.
+They are product decisions.
+
+**Join codes** are 8 characters from a 31-character alphabet with the ambiguous
+ones removed (no I/L/O/0/1, because codes get read aloud and retyped from
+screenshots). That's ~8.5e11 combinations, which is only out of reach because
+the join endpoint is rate limited; an invalid code and a code for a league you
+can't see return the same error, so the endpoint can't confirm which codes exist.
+
+**The member cap is enforced under a row lock.** A count is not something a
+database constraint can express, so two people joining simultaneously at 49
+would both pass an unlocked check. Same pattern as the balance checks in
+`transfer_funds` and `buy_stocks`.
+
+**Ownership.** The creator owns the league and can delete it; everyone else can
+leave. The owner cannot leave — they delete instead. Transferring ownership on
+the way out would be nicer, but it adds a state to reason about for something a
+small league handles socially, and an ownerless league can't be deleted by
+anyone.
+
+**Metric: percentage return, never absolute equity.** Equity means cash across
+all wallets (converted to USD) plus holdings marked to current prices — not
+realised P&L, which would reward never selling a loser.
+
+**Seasons** are global, not per-league: every league is ranked over the same
+window. Default 90 days (`SEASON_LENGTH_DAYS`). A lifetime board decays into a
+measure of who joined earliest, since someone a year ahead has compounded longer
+and a newcomer can't catch up by being better, only by waiting.
 
 - **Money persists across seasons.** Only the ranking resets.
 - **Baseline is equity at season start**, not the signup grant, so a player
   already up 300% isn't credited with that gain again every season.
 - **Mid-season joiners are excluded.** Participant rows are written once, when
-  the season opens, for accounts that already exist. No row means not ranked —
-  a late joiner measured over a shorter window isn't comparable. They're
-  enrolled automatically at the next boundary, and `viewer_ranked` in the
-  response tells the client to explain why they aren't listed.
-- **The career board** covers the same cohort measured against the starting
-  grant, which is only sound because that grant is the only money that ever
-  enters an account.
+  the season opens. No row means not ranked — a late joiner measured over a
+  shorter window isn't comparable. They're enrolled automatically at the next
+  boundary, and `viewer_ranked` tells the client to explain the absence. Note
+  this is about when the *account* was created, not when they joined the league:
+  joining a league mid-season is fine and ranks you on your season performance.
+- **The career table** measures against the starting grant, which is only sound
+  because that grant is the only money that ever enters an account.
 
-**Snapshots.** `equity_snapshots` holds one row per user per day, written by the
-scheduler at 01:00 — after the nightly price refresh, so equity is valued
-against the prices that job just wrote. Ranking needs cash plus holdings for
-every user; computing that per request would be users × holdings × price lookups
-on every page load. The unique constraint on `(user_id, captured_on)` makes the
-job idempotent, so a retry updates rather than duplicates.
-
-`ensure_season` runs daily at 01:30 and on boot, and is a no-op while a season
-is running. The boot call matters for the first deploy: without it there is no
-season, and every existing account would otherwise be treated as a mid-season
-joiner and excluded from the first one.
+**Tables are served from the daily snapshots**, not valued live. One indexed
+query instead of members × holdings × price lookups on every page load — which
+is what makes a 50-member league affordable where a 5-person cohort didn't care.
+Anyone without a snapshot yet (a new account, or any account on the first day
+before the 01:00 job runs) is valued live so they aren't silently missing;
+that's bounded by the member cap. Responses carry `as_of` so the client can say
+when the standings were taken rather than implying they're live.
 
 ## Endpoints
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/v1/leaderboard/friends` | Current season ranking across the cohort |
-| GET | `/api/v1/leaderboard/friends/career` | All-time ranking across the cohort |
+| GET | `/api/v1/leagues` | Leagues you're in |
+| POST | `/api/v1/leagues` | Create one (returns its join code) |
+| POST | `/api/v1/leagues/join` | Join with `{code}` |
+| GET | `/api/v1/leagues/<id>` | Current-season table |
+| GET | `/api/v1/leagues/<id>/career` | All-time table |
+| DELETE | `/api/v1/leagues/<id>/leave` | Leave (non-owners) |
+| DELETE | `/api/v1/leagues/<id>` | Delete (owner only) |
 | GET | `/api/v1/leaderboard/season` | The running season, or `null` |
 
 Entries carry `user_id`, `username`, `return_percent` and `rank` — never a
-balance.
+balance. Reading a table you aren't a member of returns the same error as a
+league that doesn't exist, so ids can't be enumerated to discover who is in
+what.
 
 ## Known gaps
 

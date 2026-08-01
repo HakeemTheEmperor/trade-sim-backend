@@ -348,6 +348,7 @@ def create_app():
     from .models.notification import Notification
     from .models.email_otp import EmailVerificationCode
     from .models.leaderboard import Season, SeasonParticipant, EquitySnapshot
+    from .models.league import League, LeagueMembership
     from .data_seed import DataSeed
     from .utils.update_history import UpdateHistory
     
@@ -367,6 +368,7 @@ def create_app():
     from .routes.notification_routes import bp as notification_bp
     from .routes.leaderboard_routes import bp as leaderboard_bp
     from .routes.config_routes import bp as config_bp
+    from .routes.league_routes import bp as league_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
@@ -378,6 +380,7 @@ def create_app():
     app.register_blueprint(notification_bp)
     app.register_blueprint(leaderboard_bp)
     app.register_blueprint(config_bp)
+    app.register_blueprint(league_bp)
     app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
     
 

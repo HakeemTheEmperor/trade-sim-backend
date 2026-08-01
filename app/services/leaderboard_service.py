@@ -3,17 +3,8 @@ import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import or_
-
 from .. import db
-from ..custom_exceptions import DataNotFound
-from ..models.leaderboard import (
-    STARTING_EQUITY_USD,
-    EquitySnapshot,
-    Season,
-    SeasonParticipant,
-)
-from ..models.shadow_link import ShadowLink, ShadowStatus
+from ..models.leaderboard import EquitySnapshot, Season, SeasonParticipant
 from ..models.stock_price import StockPrice
 from ..models.user import User
 from ..models.user_stock_wallet import UserStockWallet
@@ -175,88 +166,3 @@ class LeaderboardService:
         return self.open_season()
 
     # ------------------------------------------------------------ leaderboard
-
-    def _friend_ids(self, user_id):
-        """The user plus everyone they have an ACCEPTED shadow link with, in
-        either direction. Friend boards are mutual by construction — you only
-        appear on a board with someone who agreed to the link."""
-        links = ShadowLink.query.filter(
-            ShadowLink.status == ShadowStatus.ACCEPTED,
-            or_(ShadowLink.subject_id == user_id, ShadowLink.shadow_id == user_id),
-        ).all()
-        ids = {int(user_id)}
-        for link in links:
-            ids.add(int(link.subject_id))
-            ids.add(int(link.shadow_id))
-        return ids
-
-    def friend_board(self, user_id):
-        """Rank the user and their accepted connections for the current season.
-
-        Ranked on percentage return, never absolute equity. The two are
-        equivalent today, but absolute breaks the moment baselines differ — and
-        showing balances would contradict the privacy rule the shadow feature is
-        built on (trade events deliberately carry no amounts).
-        """
-        season = self.current_season()
-        if not season:
-            raise DataNotFound("No season is currently running")
-
-        ids = self._friend_ids(user_id)
-        participants = (SeasonParticipant.query
-                        .filter(SeasonParticipant.season_id == season.id,
-                                SeasonParticipant.user_id.in_(ids))
-                        .all())
-
-        prices, rates = {}, {}
-        rows = []
-        for participant in participants:
-            equity, _, _ = self.compute_equity(participant.user_id, prices, rates)
-            baseline = Decimal(participant.baseline_equity)
-            # A baseline of zero can't produce a meaningful percentage. Only
-            # reachable for an account that was already wiped out at season
-            # start; treat it as flat rather than dividing by zero.
-            change = ((equity - baseline) / baseline * 100) if baseline > 0 else Decimal(0)
-            rows.append({
-                "user_id": participant.user_id,
-                "username": participant.user.username if participant.user else None,
-                "return_percent": float(round(change, 2)),
-            })
-
-        rows.sort(key=lambda r: r["return_percent"], reverse=True)
-        for position, row in enumerate(rows, start=1):
-            row["rank"] = position
-
-        return {
-            "season": season.to_dict(),
-            "entries": rows,
-            # Told explicitly rather than left to be inferred from an absent row,
-            # so the client can explain why someone isn't listed.
-            "viewer_ranked": any(r["user_id"] == int(user_id) for r in rows),
-        }
-
-    def career_board(self, user_id):
-        """All-time board: return since the account was funded.
-
-        Measured against the same starting grant for everyone, which is only
-        sound because that grant is the only money that ever enters an account.
-        """
-        ids = self._friend_ids(user_id)
-        prices, rates = {}, {}
-        rows = []
-        for uid in ids:
-            user = User.query.get(uid)
-            if not user:
-                continue
-            equity, _, _ = self.compute_equity(uid, prices, rates)
-            change = (equity - STARTING_EQUITY_USD) / STARTING_EQUITY_USD * 100
-            rows.append({
-                "user_id": uid,
-                "username": user.username,
-                "return_percent": float(round(change, 2)),
-            })
-
-        rows.sort(key=lambda r: r["return_percent"], reverse=True)
-        for position, row in enumerate(rows, start=1):
-            row["rank"] = position
-        return {"entries": rows}
