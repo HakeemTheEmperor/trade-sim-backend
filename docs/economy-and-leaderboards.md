@@ -143,13 +143,29 @@ and a newcomer can't catch up by being better, only by waiting.
 - **The career table** measures against the starting grant, which is only sound
   because that grant is the only money that ever enters an account.
 
-**Tables are served from the daily snapshots**, not valued live. One indexed
-query instead of members × holdings × price lookups on every page load — which
-is what makes a 50-member league affordable where a 5-person cohort didn't care.
-Anyone without a snapshot yet (a new account, or any account on the first day
-before the 01:00 job runs) is valued live so they aren't silently missing;
-that's bounded by the member cap. Responses carry `as_of` so the client can say
-when the standings were taken rather than implying they're live.
+**Tables are computed live.** Equity is valued from current balances and prices
+on every request, batched across the cohort — three queries for the whole
+league regardless of member count, rather than the per-user loop that made live
+valuation look expensive in the first place. A trade moves the standings
+immediately.
+
+An earlier version served tables from the nightly `equity_snapshots` instead.
+That was cheap, but it meant a trade didn't move the leaderboard until 01:00 the
+next morning — in a trading app, the single thing people open the leaderboard to
+check. Snapshots remain, for what they're genuinely good at: daily history and
+the time series any future "return this week" view needs.
+
+**Ownership and closing a league.** The creator owns it. Anyone can leave,
+including the owner — ownership then passes to the longest-standing remaining
+member, and the last person out closes the league automatically so no empty,
+unreachable rows are left behind.
+
+A league can only be **deleted while its owner is the last member**. Deleting a
+populated one would let an owner who dislikes the standings erase them for
+everybody, and the table is a shared object. This is also why the owner has to
+be able to leave: an earlier rule forbade it (to avoid modelling an ownership
+transfer), which combined with this restriction would trap an owner in a league
+they could neither exit nor close.
 
 ## Endpoints
 

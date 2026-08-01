@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -13,7 +14,11 @@ from ..models.league import (
     max_leagues_per_user,
 )
 from ..models.leaderboard import STARTING_EQUITY_USD, EquitySnapshot, SeasonParticipant
+from ..models.stock_price import StockPrice
 from ..models.user import User
+from ..models.user_stock_wallet import UserStockWallet
+from ..models.wallet import Wallet
+from ..utils.validation_utils import quantize_money
 from .leaderboard_service import LeaderboardService
 
 logger = logging.getLogger(__name__)
@@ -87,35 +92,72 @@ class LeagueService:
         return league.to_dict(member_count=members + 1, is_owner=False)
 
     def leave_league(self, user_id, league_id):
-        league = League.query.get(league_id)
+        """Leave a league. Anyone can, including the owner.
+
+        The owner used to be forbidden from leaving, on the reasoning that
+        transferring ownership added a state to reason about. That was only
+        tenable while an owner could delete instead — now that deletion requires
+        being alone, forbidding the owner to leave would imprison them in a
+        league they can neither exit nor close. Transferring is the cheaper of
+        the two problems.
+        """
+        league = League.query.filter_by(id=league_id).with_for_update().first()
         if not league:
             raise DataNotFound("League not found")
-        # The owner deletes rather than leaves. Transferring ownership on the way
-        # out is nicer, but it adds a state to reason about for a case that a
-        # small league can handle socially — and an ownerless league can't be
-        # deleted by anyone.
-        if int(league.owner_id) == int(user_id):
-            raise ValueError(
-                "You own this league — delete it instead of leaving"
-            )
         membership = LeagueMembership.query.filter_by(
             league_id=league_id, user_id=int(user_id)
         ).first()
         if not membership:
             raise DataNotFound("You're not in that league")
+
+        name = league.name
         db.session.delete(membership)
+        db.session.flush()
+
+        remaining = (LeagueMembership.query
+                     .filter_by(league_id=league_id)
+                     .order_by(LeagueMembership.joined_at.asc(), LeagueMembership.id.asc())
+                     .all())
+
+        if not remaining:
+            # Last one out closes it. Nobody can see an empty league's code, so
+            # leaving it behind would be litter nobody could ever clear.
+            db.session.delete(league)
+            db.session.commit()
+            return {"message": f"You have left {name}. It was empty, so it has been closed."}
+
+        if int(league.owner_id) == int(user_id):
+            # Longest-standing remaining member inherits it.
+            league.owner_id = remaining[0].user_id
+
         db.session.commit()
-        return {"message": f"You have left {league.name}"}
+        return {"message": f"You have left {name}"}
 
     def delete_league(self, user_id, league_id):
-        league = League.query.get(league_id)
+        """Close a league — owner only, and only once they're the last one in it.
+
+        Deleting a populated league would let an owner who doesn't like the
+        standings erase them for everybody. The table is a shared object; one
+        member shouldn't be able to destroy it unilaterally. An owner who wants
+        out leaves instead, and ownership passes on.
+        """
+        league = League.query.filter_by(id=league_id).with_for_update().first()
         if not league:
             raise DataNotFound("League not found")
+        # Same answer as a missing league: a non-owner shouldn't learn that a
+        # league exists but isn't theirs.
         if int(league.owner_id) != int(user_id):
             raise DataNotFound("League not found")
+
+        members = LeagueMembership.query.filter_by(league_id=league_id).count()
+        if members > 1:
+            raise ValueError(
+                "You can't delete a league other people are in. Leave it instead — "
+                "ownership passes to another member."
+            )
+
         name = league.name
-        # Memberships cascade.
-        db.session.delete(league)
+        db.session.delete(league)   # memberships cascade
         db.session.commit()
         return {"message": f"{name} has been deleted"}
 
@@ -168,42 +210,52 @@ class LeagueService:
     # ---------------------------------------------------------------- tables
 
     def _equity_for(self, user_ids):
-        """Latest known equity per user, from the daily snapshots.
+        """Live equity per user, in three queries for the whole cohort.
 
-        Reading snapshots rather than valuing live is what makes a 50-member
-        table affordable: one indexed query instead of members x holdings x
-        price lookups on every page load.
+        This used to read the nightly equity_snapshots table, which made a table
+        cheap but meant a trade didn't move the standings until 01:00 the next
+        morning — in a trading app, the one thing people open the leaderboard to
+        see. The cost I was avoiding was never "live", it was compute_equity's
+        per-user loop; batched over the cohort it's three queries regardless of
+        member count, which is cheaper than the snapshot path was for a small
+        league and still fine at the 50-member cap.
 
-        Anyone without a snapshot yet — a brand new account, or any account on
-        the first day before the 01:00 job has run — is valued live so they
-        aren't silently missing from the table. Bounded by the member cap.
+        Snapshots stay for what they're actually for: daily history, and the
+        time series any "return this week" view would need.
         """
-        latest = {}
         if not user_ids:
-            return latest
+            return {}
 
-        newest = (db.session.query(
-                    EquitySnapshot.user_id,
-                    func.max(EquitySnapshot.captured_on).label("day"))
-                  .filter(EquitySnapshot.user_id.in_(user_ids))
-                  .group_by(EquitySnapshot.user_id)
-                  .subquery())
+        wallet_rows = (db.session.query(Wallet.user_id, Wallet.currency, Wallet.balance)
+                       .filter(Wallet.user_id.in_(user_ids)).all())
+        holding_rows = (db.session.query(UserStockWallet.user_id,
+                                         UserStockWallet.symbol,
+                                         UserStockWallet.quantity)
+                        .filter(UserStockWallet.user_id.in_(user_ids)).all())
 
-        rows = (db.session.query(EquitySnapshot)
-                .join(newest,
-                      (EquitySnapshot.user_id == newest.c.user_id)
-                      & (EquitySnapshot.captured_on == newest.c.day))
-                .all())
-        for row in rows:
-            latest[int(row.user_id)] = (Decimal(row.equity), row.captured_on)
+        symbols = {row.symbol for row in holding_rows}
+        prices = {}
+        if symbols:
+            prices = {
+                symbol: Decimal(price)
+                for symbol, price in db.session.query(
+                    StockPrice.symbol, StockPrice.current_price
+                ).filter(StockPrice.symbol.in_(symbols)).all()
+            }
 
-        missing = [uid for uid in user_ids if uid not in latest]
-        if missing:
-            prices, rates = {}, {}
-            for uid in missing:
-                equity, _, _ = self.leaderboard.compute_equity(uid, prices, rates)
-                latest[uid] = (equity, None)
-        return latest
+        totals = defaultdict(Decimal)
+        rates = {}
+        for user_id, currency, balance in wallet_rows:
+            # Shared with the snapshot job on purpose: both must value a wallet
+            # the same way or the two would disagree about the same account.
+            totals[int(user_id)] += self.leaderboard._to_usd(
+                Decimal(balance or 0), currency, rates)
+        for user_id, symbol, quantity in holding_rows:
+            # A symbol with no price is worth nothing rather than crashing the
+            # table for everyone in the league.
+            totals[int(user_id)] += Decimal(quantity or 0) * prices.get(symbol, Decimal(0))
+
+        return {uid: quantize_money(totals.get(uid, Decimal(0))) for uid in user_ids}
 
     def season_table(self, user_id, league_id):
         league, member_ids = self._member_ids(user_id, league_id)
@@ -218,12 +270,9 @@ class LeagueService:
         equity = self._equity_for([int(p.user_id) for p in participants])
 
         rows = []
-        as_of = None
         for participant in participants:
             uid = int(participant.user_id)
-            value, captured_on = equity.get(uid, (Decimal(0), None))
-            if captured_on and (as_of is None or captured_on > as_of):
-                as_of = captured_on
+            value = equity.get(uid, Decimal(0))
             baseline = Decimal(participant.baseline_equity)
             change = ((value - baseline) / baseline * 100) if baseline > 0 else Decimal(0)
             rows.append({
@@ -239,9 +288,6 @@ class LeagueService:
             ),
             "season": season.to_dict(),
             "entries": self._ranked(rows),
-            # Standings are as of the last snapshot, so the client can say so
-            # rather than implying they're live.
-            "as_of": as_of.isoformat() if as_of else None,
             "viewer_ranked": any(r["user_id"] == int(user_id) for r in rows),
         }
 
@@ -254,7 +300,7 @@ class LeagueService:
             user = User.query.get(uid)
             if not user:
                 continue
-            value, _ = equity.get(uid, (Decimal(0), None))
+            value = equity.get(uid, Decimal(0))
             change = (value - STARTING_EQUITY_USD) / STARTING_EQUITY_USD * 100
             rows.append({
                 "user_id": uid,
