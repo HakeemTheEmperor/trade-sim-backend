@@ -74,6 +74,21 @@ class AuthService:
             # rather than lose an account that's already committed.
             self.send_verification_code(new_user)
 
+            # Enrol in the running season if it opened recently enough. Imported
+            # lazily so the leaderboard stays decoupled from the signup path.
+            #
+            # Guarded here as well as inside enrol_new_user, because the account
+            # is ALREADY COMMITTED at this point: anything escaping would be
+            # caught by the broad handler below and returned as a failed signup,
+            # leaving the user unable to tell whether their account exists. The
+            # worst an enrolment failure should cost is a season's ranking.
+            try:
+                from .leaderboard_service import LeaderboardService
+                LeaderboardService().enrol_new_user(new_user.id)
+            except Exception:
+                logger.exception(
+                    "Could not enrol user %s in the current season", new_user.id)
+
             return new_user
         except MissingProperties:
             db.session.rollback()

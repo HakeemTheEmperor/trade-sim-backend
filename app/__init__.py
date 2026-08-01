@@ -95,16 +95,35 @@ def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload["jti"]
     return RevokedToken.is_revoked(jti)
 
+# The client response stays deliberately generic — it must not describe our auth
+# internals to an unauthenticated caller. But the `error` argument carries the
+# ACTUAL reason ("Missing cookie \"access_token_cookie\"", "Missing CSRF token",
+# "CSRF double submit tokens do not match"), and discarding it made three very
+# different production failures indistinguishable from each other. Log it.
+def _log_auth_rejection(reason):
+    logger.warning(
+        "Auth rejected: %s %s -> %s | cookies=%s | csrf_header=%s",
+        request.method,
+        request.path,
+        reason,
+        sorted(request.cookies.keys()),
+        bool(request.headers.get("X-CSRF-TOKEN")),
+    )
+
+
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
+    _log_auth_rejection(f"invalid token: {error}")
     return jsonify({"error": "Invalid token. Please log in again."}), 401
 
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
+    _log_auth_rejection("expired token")
     return jsonify({"error": "Token has expired. Please log in again."}), 401
 
 @jwt.unauthorized_loader
 def missing_token_callback(error):
+    _log_auth_rejection(str(error))
     return jsonify({"error": "Missing token. Authorization required."}), 401
 
 

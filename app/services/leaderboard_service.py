@@ -13,10 +13,30 @@ from ..utils.validation_utils import quantize_money
 
 logger = logging.getLogger(__name__)
 
-# Quarterly by default. A year is too long for a friend group's attention and
-# too long to recover from a bad start — go down early and the board is dead for
-# nine months. Override per deployment, but prefer changing it at a boundary.
+
+def _as_aware(value):
+    """Treat a naive datetime from the DB as UTC before comparing it."""
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+# Quarterly. A year is too long for a friend group's attention and too long to
+# recover from a bad start — go down early and the board is dead for nine months.
+# Override per deployment, but prefer changing it at a boundary.
 DEFAULT_SEASON_LENGTH_DAYS = 90
+
+# How far into a season an account can still be created and be ranked in it.
+#
+# Without this the rule is brutally binary: sign up one minute after a season
+# opens and you sit unrankable for the whole quarter, which for a young app is
+# every new user. A grace window keeps the fairness intent — someone joining in
+# the closing weeks can't be measured against people who ran the full period —
+# while making the common case work. At 30 days on a 90-day season, the window
+# covers the first third.
+#
+# Set to 0 to exclude everyone not present at the open; set it to the season
+# length to rank everybody always.
+DEFAULT_SEASON_JOIN_GRACE_DAYS = 30
 
 
 def season_length_days():
@@ -29,6 +49,21 @@ def season_length_days():
     if days < 1:
         logger.warning("SEASON_LENGTH_DAYS=%d is not positive; using %d", days, DEFAULT_SEASON_LENGTH_DAYS)
         return DEFAULT_SEASON_LENGTH_DAYS
+    return days
+
+
+def season_join_grace_days():
+    raw = os.getenv("SEASON_JOIN_GRACE_DAYS", str(DEFAULT_SEASON_JOIN_GRACE_DAYS)).strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        logger.warning("SEASON_JOIN_GRACE_DAYS=%r is not an integer; using %d",
+                       raw, DEFAULT_SEASON_JOIN_GRACE_DAYS)
+        return DEFAULT_SEASON_JOIN_GRACE_DAYS
+    if days < 0:
+        logger.warning("SEASON_JOIN_GRACE_DAYS=%d is negative; using %d",
+                       days, DEFAULT_SEASON_JOIN_GRACE_DAYS)
+        return DEFAULT_SEASON_JOIN_GRACE_DAYS
     return days
 
 
@@ -151,6 +186,44 @@ class LeaderboardService:
         db.session.commit()
         logger.info("Opened %r with %d participants", season.name, enrolled)
         return season
+
+    def enrol_new_user(self, user_id):
+        """Enrol a just-created account into the running season, if it opened
+        recently enough. Returns True if a participant row was written.
+
+        Baseline is the account's equity right now — the starting grant — so a
+        late joiner is measured over their own window from their own starting
+        line, not handed anyone else's head start.
+
+        Never raises: an account that fails to enrol is unranked until the next
+        season, which is a far better outcome than a signup that 500s.
+        """
+        try:
+            season = self.current_season()
+            if not season:
+                return False
+            grace = season_join_grace_days()
+            age = _as_aware(datetime.now(timezone.utc)) - _as_aware(season.starts_at)
+            if age > timedelta(days=grace):
+                logger.info(
+                    "User %s signed up %s into the season (grace %dd); "
+                    "not ranked until the next season", user_id, age, grace)
+                return False
+            if SeasonParticipant.query.filter_by(
+                season_id=season.id, user_id=int(user_id)
+            ).first():
+                return True
+            equity, _, _ = self.compute_equity(user_id)
+            db.session.add(SeasonParticipant(
+                season_id=season.id, user_id=int(user_id), baseline_equity=equity,
+            ))
+            db.session.commit()
+            logger.info("Enrolled user %s in season %s", user_id, season.id)
+            return True
+        except Exception:
+            db.session.rollback()
+            logger.exception("Could not enrol user %s in the current season", user_id)
+            return False
 
     def ensure_season(self, app=None):
         """Open a new season if none is currently running. Safe to call often."""

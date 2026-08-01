@@ -124,12 +124,22 @@ and a newcomer can't catch up by being better, only by waiting.
 - **Money persists across seasons.** Only the ranking resets.
 - **Baseline is equity at season start**, not the signup grant, so a player
   already up 300% isn't credited with that gain again every season.
-- **Mid-season joiners are excluded.** Participant rows are written once, when
-  the season opens. No row means not ranked — a late joiner measured over a
-  shorter window isn't comparable. They're enrolled automatically at the next
-  boundary, and `viewer_ranked` tells the client to explain the absence. Note
-  this is about when the *account* was created, not when they joined the league:
-  joining a league mid-season is fine and ranks you on your season performance.
+- **There is a joining window, then exclusion.** Sign up within
+  `SEASON_JOIN_GRACE_DAYS` (30) of a season opening and you're enrolled
+  immediately, with your own starting equity as the baseline. Sign up after that
+  and you wait for the next season.
+
+  Without the grace the rule was brutally binary: signing up one minute after a
+  season opened left you unrankable for the whole quarter — which, for a young
+  app, is every new user. The window keeps the fairness intent (someone
+  appearing in the closing weeks can't be measured against people who ran the
+  full period) while making the common case work. `viewer_ranked` tells the
+  client to explain the absence rather than leaving someone to notice they're
+  missing from their own league.
+
+  This is about when the *account* was created, not when it joined the league:
+  joining a league at any point in a season is fine and ranks you on your season
+  performance.
 - **The career table** measures against the starting grant, which is only sound
   because that grant is the only money that ever enters an account.
 
