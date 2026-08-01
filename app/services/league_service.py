@@ -278,7 +278,13 @@ class LeagueService:
             rows.append({
                 "user_id": uid,
                 "username": participant.user.username if participant.user else None,
-                "return_percent": float(round(change, 2)),
+                # Three decimals to match what the UI renders. At two the
+                # backend was rounding away everything below 0.005%, while
+                # PercentageChange padded the result out to three digits — so a
+                # trade whose real cost was -0.001% displayed as a confident
+                # "0.000%", which reads as "nothing happened" rather than
+                # "too small to show".
+                "return_percent": float(round(change, 3)),
             })
 
         return {
@@ -305,7 +311,13 @@ class LeagueService:
             rows.append({
                 "user_id": uid,
                 "username": user.username,
-                "return_percent": float(round(change, 2)),
+                # Three decimals to match what the UI renders. At two the
+                # backend was rounding away everything below 0.005%, while
+                # PercentageChange padded the result out to three digits — so a
+                # trade whose real cost was -0.001% displayed as a confident
+                # "0.000%", which reads as "nothing happened" rather than
+                # "too small to show".
+                "return_percent": float(round(change, 3)),
             })
 
         return {
@@ -317,7 +329,27 @@ class LeagueService:
         }
 
     def _ranked(self, rows):
-        rows.sort(key=lambda r: r["return_percent"], reverse=True)
+        """Sort by return and assign standard competition ranks.
+
+        Equal returns share a rank, and the next distinct value takes the rank
+        of its position — 1, 2, 2, 4 rather than 1, 2, 3, 4. Sequential ranks
+        made a tie look like a result: two members both on 0.000% were shown as
+        1st and 2nd, with the order decided by nothing more than who was
+        enrolled in the season first.
+
+        Ties are ordered by username so that the ORDER is at least deterministic
+        rather than an artefact of database row order. They still share a rank,
+        so nothing about that ordering claims one beat the other.
+        """
+        rows.sort(key=lambda r: (-r["return_percent"], (r["username"] or "").lower()))
+
+        previous_value = None
+        previous_rank = 0
         for position, row in enumerate(rows, start=1):
-            row["rank"] = position
+            if previous_value is not None and row["return_percent"] == previous_value:
+                row["rank"] = previous_rank
+            else:
+                row["rank"] = position
+                previous_rank = position
+                previous_value = row["return_percent"]
         return rows
