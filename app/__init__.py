@@ -347,6 +347,7 @@ def create_app():
     from .models.shadow_link import ShadowLink
     from .models.notification import Notification
     from .models.email_otp import EmailVerificationCode
+    from .models.leaderboard import Season, SeasonParticipant, EquitySnapshot
     from .data_seed import DataSeed
     from .utils.update_history import UpdateHistory
     
@@ -364,6 +365,7 @@ def create_app():
     from .routes.watchlist_routes import bp as watchlist_bp
     from .routes.shadow_routes import bp as shadow_bp
     from .routes.notification_routes import bp as notification_bp
+    from .routes.leaderboard_routes import bp as leaderboard_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
@@ -373,6 +375,7 @@ def create_app():
     app.register_blueprint(watchlist_bp)
     app.register_blueprint(shadow_bp)
     app.register_blueprint(notification_bp)
+    app.register_blueprint(leaderboard_bp)
     app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
     
 
@@ -393,10 +396,27 @@ def create_app():
             target=run_initial_seed, args=[app], name="initial-seed", daemon=True
         ).start()
 
+        from .services.leaderboard_service import LeaderboardService
+        leaderboard = LeaderboardService()
+
+        # A season must exist before anyone can be ranked, and the first boot
+        # after this ships has none. Enrolling here also means every account
+        # that already exists gets a baseline, rather than being treated as a
+        # mid-season joiner and excluded from the first season.
+        with app.app_context():
+            leaderboard.ensure_season()
+
         update_history = UpdateHistory()
         scheduler = BackgroundScheduler()
         scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
         scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
+        # Snapshot after the nightly price refresh, so equity is valued against
+        # the prices that job just wrote rather than yesterday's.
+        scheduler.add_job(leaderboard.snapshot_all, CronTrigger(hour=1, minute=0, second=0), args=[app])
+        # Rolls into the next season once the current one lapses. Runs daily
+        # because the boundary only needs to be noticed within a day, and a
+        # missed run self-corrects on the next one.
+        scheduler.add_job(leaderboard.ensure_season, CronTrigger(hour=1, minute=30, second=0), args=[app])
         scheduler.start()
         atexit.register(lambda: scheduler.shutdown())
 
