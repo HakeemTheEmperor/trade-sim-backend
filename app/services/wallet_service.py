@@ -10,7 +10,8 @@ from ..models.transactions import Transaction, TransactionType, TransactionCateg
 from .. import db
 from ..custom_exceptions import AlreadyExists, DataNotFound, InsufficientFunds, MissingProperties
 from ..utils.enums_utils import ErrorStatuses
-from ..utils.validation_utils import validate_positive_number, validate_wallet_id
+from ..utils.fees import fx_spread
+from ..utils.validation_utils import quantize_money, validate_positive_number, validate_wallet_id
 # Aliased so it doesn't shadow the ExchangeRate *model* imported above.
 from ..integrations.providers import ExchangeRate as ExchangeRateAPI
 
@@ -201,20 +202,48 @@ class WalletService:
 
             if not from_wallet or not to_wallet:
                 raise DataNotFound("Invalid wallet Id entered. Confirm both the Sender and Receiver's wallet IDs", ErrorStatuses.WALLET_NOT_FOUND.value)
+            # Both wallets must belong to the caller. Transfers are strictly
+            # between your OWN wallets: the app is a skill simulator, so the
+            # amount of money in play has to be what the app granted, not what
+            # somebody else was willing to hand over. With no deposit endpoint,
+            # a cross-user transfer was the only way to get more than the
+            # starting balance into an account — and once there are leaderboards
+            # it becomes a straightforward collusion route (several accounts
+            # funnelling into one).
+            #
+            # Both failures use the same message as an unknown wallet, so this
+            # can't be used to probe which wallet ids exist or who owns them.
             if int(from_wallet.user_id) != int(user_id):
+                raise DataNotFound("We could not find the wallet you entered", ErrorStatuses.WALLET_NOT_FOUND.value)
+            if int(to_wallet.user_id) != int(user_id):
                 raise DataNotFound("We could not find the wallet you entered", ErrorStatuses.WALLET_NOT_FOUND.value)
             # If the sender's wallet balance is less than the amount to be transferred, return error
             if from_wallet.balance < amount:
                 raise InsufficientFunds("Insufficient funds in the source wallet")
             converted_amount = amount
-            
+            fx_fee = Decimal(0)
+
             # If currencies are different, get exchange rate and convert from senders currency to receivers currency
             if from_wallet.currency != to_wallet.currency:
                 rate = self.get_exchange_rate(from_wallet.currency, to_wallet.currency)
                 if not rate:
                     raise DataNotFound("Exchange rate not available")
-                converted_amount = amount * rate
-            
+                gross_converted = quantize_money(amount * rate)
+                # The FX markup: how brokers and money apps actually earn on a
+                # conversion, taken out of the converted amount rather than shown
+                # as a separate charge. Same-currency transfers convert nothing,
+                # so they cost nothing — matching the real world, and leaving
+                # moving your own money around free.
+                fx_fee = quantize_money(gross_converted * fx_spread())
+                converted_amount = gross_converted - fx_fee
+                # Quantizing both sides means a small enough transfer can round
+                # the credit away entirely. Debiting the sender for a zero credit
+                # would simply destroy their money.
+                if converted_amount <= 0:
+                    raise ValueError("This amount is too small to convert at the current rate")
+            else:
+                converted_amount = quantize_money(amount)
+
             from_wallet.balance -= amount
             to_wallet.balance += converted_amount
             
@@ -236,6 +265,9 @@ class WalletService:
                 transaction_type=TransactionType.CREDIT,
                 transaction_category=TransactionCategory.WALLET_TRANSFER,
                 total_value=converted_amount,
+                # Recorded on the credit leg because the fee is denominated in
+                # the currency received, having been taken out of the conversion.
+                fee=fx_fee,
                 currency=to_wallet.currency,
             )
             db.session.add(sender_transaction)

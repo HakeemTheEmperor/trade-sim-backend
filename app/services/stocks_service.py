@@ -12,6 +12,7 @@ from ..models.wallet import Wallet, WalletCurrencyType
 import logging
 
 from ..utils.enums_utils import ErrorStatuses
+from ..utils.fees import buy_execution_price, sell_execution_price
 from ..utils.validation_utils import (
     validate_positive_number,
     clamp_pagination,
@@ -120,8 +121,14 @@ class StocksService:
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
-            total_cost = quantize_money(current_price * quantity)
-            if total_cost < MIN_TRADE_VALUE:
+            # You buy at the ask, i.e. above the quoted mid. market_value is what
+            # the position is worth the moment you own it, total_cost is what you
+            # actually paid — the gap is the spread you ate on the way in.
+            execution_price = buy_execution_price(current_price)
+            market_value = quantize_money(current_price * quantity)
+            total_cost = quantize_money(execution_price * quantity)
+            fee = total_cost - market_value
+            if market_value < MIN_TRADE_VALUE:
                 raise ValueError(f"Trade value must be at least ${MIN_TRADE_VALUE}")
 
             # Lock the wallet row for the duration of the transaction so two
@@ -129,6 +136,9 @@ class StocksService:
             wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
             if not wallet:
                 raise DataNotFound("We did not find the specified wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
+            # Checked against total_cost, NOT market_value. Testing affordability
+            # against the pre-spread figure would let a full-balance buy overdraw
+            # by exactly the spread.
             if wallet.balance < total_cost:
                 raise ValueError("Insufficient balance.")
             wallet.balance -= total_cost
@@ -144,11 +154,14 @@ class StocksService:
                 from_wallet_id=wallet_id,
                 stock_symbol=symbol,
                 quantity=quantity,
-                price_per_share=current_price,
+                # The price actually paid, not the quote, so the history shows
+                # what happened rather than what was advertised.
+                price_per_share=execution_price,
                 transaction_type=TransactionType.BUY,
                 transaction_category=TransactionCategory.STOCK_TRADE,
                 currency=wallet.currency,
-                total_value=total_cost
+                total_value=total_cost,
+                fee=fee
             )
             db.session.add(transaction_log)
             db.session.add(stock_wallet)
@@ -183,8 +196,17 @@ class StocksService:
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
             current_price = stock_price.current_price
+            # You sell at the bid, i.e. below the quoted mid.
+            execution_price = sell_execution_price(current_price)
+            market_value = quantize_money(quantity * current_price)
             # No minimum-value gate on sells, so any held dust can still be liquidated.
-            total_cost = quantize_money(quantity * current_price)
+            total_cost = quantize_money(execution_price * quantity)
+            fee = market_value - total_cost
+            # A sale must never leave the seller worse off in cash terms. With a
+            # percentage spread the proceeds can round to zero on true dust, and
+            # crediting zero while destroying the shares would be theft.
+            if total_cost <= 0:
+                raise ValueError("This quantity is too small to sell at the current price")
 
             wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
             if not wallet or wallet.currency != WalletCurrencyType.USD:
@@ -200,11 +222,12 @@ class StocksService:
                 from_wallet_id=wallet_id,
                 stock_symbol=symbol,
                 quantity=quantity,
-                price_per_share=current_price,
+                price_per_share=execution_price,
                 transaction_type=TransactionType.SELL,
                 transaction_category=TransactionCategory.STOCK_TRADE,
                 currency=wallet.currency,
-                total_value=total_cost
+                total_value=total_cost,
+                fee=fee
             )
             db.session.add(transaction_log)
             db.session.commit()

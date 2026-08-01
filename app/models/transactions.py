@@ -34,6 +34,12 @@ class Transaction(db.Model):
     quantity = db.Column(db.Numeric(15, 6), nullable=True)
     price_per_share = db.Column(db.Numeric(15, 6), nullable=True)
     total_value = db.Column(db.Numeric(18, 4), nullable=False)
+    # Cost of the transaction, already reflected in total_value rather than
+    # charged on top: a trade executes at a spread-adjusted price and a transfer
+    # credits the converted amount less the FX markup. Recorded separately so the
+    # cost is visible ("market $200.00, you paid $200.10") instead of hidden in
+    # the execution price the way a real broker hides it.
+    fee = db.Column(db.Numeric(18, 4), nullable=False, default=0)
     currency = db.Column(db.Enum(WalletCurrencyType), nullable=False)
     timestamp = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     
@@ -47,6 +53,7 @@ class Transaction(db.Model):
             "transaction_type": self.transaction_type.value,
             "transaction_category": self.transaction_category.value,
             "total_value": self.total_value,
+            "fee": self.fee,
             "currency": self.currency.value,
             "quantity": self.quantity,
             "price_per_share": self.price_per_share,
