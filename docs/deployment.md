@@ -238,14 +238,14 @@ Two ways out. Prefer the first.
 Put both under `toluwalase.me`:
 
 - Frontend: `app.imockmarket.toluwalase.me` → Vercel
-- Backend: `api.imockmarket.toluwalase.me` → Render
+- Backend: `api-imockmarket.toluwalase.me` → Render
 
 **Render side:**
 
 1. Service → **Settings → Custom Domains → Add Custom Domain**.
-2. Enter `api.imockmarket.toluwalase.me`.
+2. Enter `api-imockmarket.toluwalase.me`.
 3. Render shows a target. At your DNS provider add:
-   `CNAME  api.imockmarket  →  <your-service>.onrender.com`
+   `CNAME  api-imockmarket  →  <your-service>.onrender.com`
 4. Wait for verification. Render issues a TLS certificate automatically (free
    tier included). Propagation is usually minutes, occasionally an hour.
 
@@ -284,7 +284,7 @@ reaching your app. It's reversible at any time.
 
 Do it in this order, because the failure mode is quiet:
 
-1. Confirm `https://api.imockmarket.toluwalase.me/health` returns `{"status":"ok"}`.
+1. Confirm `https://api-imockmarket.toluwalase.me/health` returns `{"status":"ok"}`.
 2. **Repoint UptimeRobot at the custom domain first.** A monitor still pointed at
    `.onrender.com` when you disable it will 404 forever — which means false
    alerts, and no keep-alive traffic, so Render sleeps and Supabase pauses after
@@ -346,7 +346,7 @@ Two independent idle timers threaten this stack:
 One monitor handles both, because `/health` executes a real query:
 
 1. [uptimerobot.com](https://uptimerobot.com) → **Add New Monitor**.
-2. Type **HTTP(s)**, URL `https://api.imockmarket.toluwalase.me/health`.
+2. Type **HTTP(s)**, URL `https://api-imockmarket.toluwalase.me/health`.
 3. Interval **5 minutes** — the free-tier minimum, comfortably under Render's
    15-minute threshold.
 4. Optionally add an alert contact so you hear about real outages.

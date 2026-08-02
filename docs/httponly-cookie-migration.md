@@ -71,7 +71,7 @@ cannot read the cookie to set the header, so it's rejected. flask-jwt-extended v
 **Decision:** serve both apps under one registrable domain:
 
 - frontend: `https://app.imockmarket.toluwalase.me`
-- backend:  `https://api.imockmarket.toluwalase.me`
+- backend:  `https://api-imockmarket.toluwalase.me`
 
 `.me` is a public suffix, so the registrable domain (eTLD+1) for both hosts is
 `toluwalase.me`. That makes them **same-site** (different origins, same site). This is the
@@ -80,7 +80,7 @@ happy path:
 - The auth cookie is **first-party**, so `SameSite` restrictions and the Safari/Firefox/
   Chrome third-party-cookie clampdowns do **not** apply. Use `SameSite=Lax` (not `None`),
   and none of the ITP/third-party-blocking pain applies.
-- The cookie is set host-only by `api.imockmarket.toluwalase.me` (no `Domain` attribute) and
+- The cookie is set host-only by `api-imockmarket.toluwalase.me` (no `Domain` attribute) and
   is automatically sent back to the API on credentialed requests from the frontend.
 
 Still required because it's cross-**origin** (different hostname):
