@@ -57,6 +57,38 @@ class Finnhub:
         return f"{Finnhub.base()}?token={os.getenv('FINNHUB_API_KEY')}"
 
 
+class Alpaca:
+    """Alpaca Market Data — bulk latest-trade snapshots for the long tail of
+    tickers the Finnhub websocket can't cover.
+
+    Credentials go in headers, not the URL. The free plan only serves the IEX
+    feed, so ``feed`` defaults to ``iex``.
+    """
+
+    @staticmethod
+    def base():
+        return os.getenv("ALPACA_DATA_URL") or "https://data.alpaca.markets"
+
+    @staticmethod
+    def snapshots_url():
+        return f"{Alpaca.base()}/v2/stocks/snapshots"
+
+    @staticmethod
+    def feed():
+        return os.getenv("ALPACA_FEED") or "iex"
+
+    @staticmethod
+    def configured():
+        return bool(os.getenv("ALPACA_API_KEY_ID") and os.getenv("ALPACA_API_SECRET_KEY"))
+
+    @staticmethod
+    def headers():
+        return {
+            "APCA-API-KEY-ID": os.getenv("ALPACA_API_KEY_ID"),
+            "APCA-API-SECRET-KEY": os.getenv("ALPACA_API_SECRET_KEY"),
+        }
+
+
 class ExchangeRate:
     """exchangerate-api.com. EXCHANGE_RATE_API is the base incl. the key segment,
     e.g. https://v6.exchangerate-api.com/v6/YOUR-KEY (NO trailing /pair or /latest).

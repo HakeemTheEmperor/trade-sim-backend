@@ -18,6 +18,7 @@ import threading
 from dotenv import load_dotenv
 from .error_handlers import register_error_handlers
 from .websocket_listener import WebSocketListener
+from .price_poller import PricePoller
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -453,7 +454,13 @@ def create_app():
         update_history = UpdateHistory()
         scheduler = BackgroundScheduler()
         scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
-        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
+        # Daily close comes from the prices we already stream, so it costs no
+        # provider requests and doesn't scale with ticker count.
+        scheduler.add_job(update_history.record_daily_closes, CronTrigger(hour=0, minute=5, second=0), args=[app])
+        # Massive (~5 req/min) only backfills new tickers and corrects a rotating
+        # slice of closes, sized by HISTORY_RECONCILE_PER_RUN. Scheduled after the
+        # snapshot/season jobs so its slow run never overlaps them.
+        scheduler.add_job(update_history.reconcile_price_history, CronTrigger(hour=2, minute=0, second=0), args=[app])
         # Snapshot after the nightly price refresh, so equity is valued against
         # the prices that job just wrote rather than yesterday's.
         scheduler.add_job(leaderboard.snapshot_all, CronTrigger(hour=1, minute=0, second=0), args=[app])
@@ -466,6 +473,11 @@ def create_app():
 
         websocket_listener = WebSocketListener(app)
         websocket_listener.start()
+
+        # Covers every ticker beyond the websocket's symbol cap.
+        price_poller = PricePoller(app, exclude_symbols=websocket_listener.symbols)
+        price_poller.start()
+        atexit.register(price_poller.stop)
     else:
         logger.info("RUN_BACKGROUND_JOBS is disabled; skipping DB startup work (admin/seed/scheduler/websocket)")
 

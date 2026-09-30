@@ -1,5 +1,6 @@
 from decimal import Decimal
 import logging
+import os
 import time
 import json
 import threading
@@ -26,8 +27,11 @@ class WebSocketListener:
     def load_symbols(self):
         from .models.stock_available import AvailableStocks
         with self.app.app_context():
-            symbols = [avs.symbol for avs in AvailableStocks.query.all()]
-            return symbols if symbols else ["AAPL"]
+            symbols = sorted(avs.symbol for avs in AvailableStocks.query.all())
+            # Finnhub's free websocket allows ~50 symbols; the rest are covered
+            # by PricePoller, which skips whatever this list holds.
+            max_symbols = int(os.getenv("FINNHUB_MAX_SYMBOLS", "50"))
+            return symbols[:max_symbols] if symbols else ["AAPL"]
 
     def start_buffer_thread(self):
         self.buffer_thread = threading.Thread(target=self.process_buffer, daemon=True)
@@ -40,28 +44,29 @@ class WebSocketListener:
 
     def flush_buffer_to_db(self):
         from . import db
-        from .models.stock_price import StockPrice
+        from .utils.price_writer import write_prices
+
+        # Swap the buffer out under the lock and release it straight away, so
+        # on_message is never blocked behind DB I/O.
         with self.buffer_lock:
-            logger.debug("Flushing price buffer to db")
             if not self.price_buffer:
                 return  # Nothing to flush
-            with self.app.app_context():
-                for symbol, price_decimal in self.price_buffer.items():
-                    stock = StockPrice.query.filter_by(symbol=symbol).first()
-                    if stock:
-                        if stock.current_price > 0:
-                            percentage_change = ((price_decimal - stock.current_price) / stock.current_price) * 100
-                        else:
-                            percentage_change = 0
-                        stock.previous_price = stock.current_price
-                        stock.current_price = price_decimal  # Use Decimal, not float
-                        stock.percentage_change = percentage_change
-                    else:
-                        stock = StockPrice(symbol=symbol, current_price=price_decimal)
-                    db.session.add(stock)
-                db.session.commit()
-                logger.info("Updated %d symbols", len(self.price_buffer))
-                self.price_buffer.clear()  # Clear after commit
+            pending = self.price_buffer
+            self.price_buffer = defaultdict(lambda: None)
+
+        logger.debug("Flushing %d buffered prices to db", len(pending))
+        with self.app.app_context():
+            try:
+                write_prices(pending)
+                logger.info("Updated %d symbols", len(pending))
+            except Exception:
+                db.session.rollback()
+                logger.exception("Price flush failed; re-queuing %d symbols", len(pending))
+                # Put the prices back, but never over a newer tick that arrived
+                # while we were writing.
+                with self.buffer_lock:
+                    for symbol, price_decimal in pending.items():
+                        self.price_buffer.setdefault(symbol, price_decimal)
 
     def on_message(self, ws, message):
         data = json.loads(message)
