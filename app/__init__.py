@@ -187,7 +187,7 @@ def run_initial_seed(app):
 
         if needs_history:
             logger.info("No price history found; running initial history backfill")
-            UpdateHistory().update_price_history(app)
+            UpdateHistory().backfill(app)
         else:
             logger.info("Price history already present; skipping initial backfill")
     except Exception:
@@ -457,9 +457,10 @@ def create_app():
         # Daily close comes from the prices we already stream, so it costs no
         # provider requests and doesn't scale with ticker count.
         scheduler.add_job(update_history.record_daily_closes, CronTrigger(hour=0, minute=5, second=0), args=[app])
-        # Massive (~5 req/min) only backfills new tickers and corrects a rotating
-        # slice of closes, sized by HISTORY_RECONCILE_PER_RUN. Scheduled after the
-        # snapshot/season jobs so its slow run never overlaps them.
+        # Alpaca bulk bars backfill new tickers and replace the recorded closes
+        # with consolidated ones (minutes, not hours). Without Alpaca keys it
+        # falls back to a budgeted Massive pass. Scheduled after the snapshot/
+        # season jobs so it never overlaps them.
         scheduler.add_job(update_history.reconcile_price_history, CronTrigger(hour=2, minute=0, second=0), args=[app])
         # Snapshot after the nightly price refresh, so equity is valued against
         # the prices that job just wrote rather than yesterday's.

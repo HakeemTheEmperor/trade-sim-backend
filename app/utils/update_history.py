@@ -3,11 +3,17 @@ import os
 import requests
 import time
 from datetime import datetime, time as dtime, timedelta, timezone
+from decimal import Decimal
+
+from ..integrations.providers import Alpaca
 
 logger = logging.getLogger(__name__)
 
 # Cap outbound calls so a slow provider can't stall the scheduler job.
 REQUEST_TIMEOUT_SECONDS = 15
+
+# Symbols per Alpaca bars request; keeps the query string well under URL limits.
+ALPACA_CHUNK = 100
 
 HISTORY_DAYS = 30
 # A symbol with fewer history rows than this in the window is treated as new
@@ -89,8 +95,131 @@ class UpdateHistory:
                 db.session.rollback()
                 logger.exception("Failed to record daily closes for %s", trade_day)
 
-    def reconcile_price_history(self, app, limit=None):
-        """Backfill new tickers and correct closes from Massive, within a budget.
+    def backfill(self, app):
+        """Fill a fresh database: every ticker, no budget."""
+        if Alpaca.configured():
+            self.sync_history_alpaca(app)
+        else:
+            self.update_price_history(app)
+
+    def reconcile_price_history(self, app):
+        """Nightly: backfill new tickers and correct closes from a real provider."""
+        if Alpaca.configured():
+            self.sync_history_alpaca(app)
+        else:
+            logger.warning("Alpaca not configured; reconciling history via Massive (rate-limited)")
+            self._reconcile_massive(app)
+
+    def sync_history_alpaca(self, app, symbols=None, days=HISTORY_DAYS):
+        """Upsert daily bars for every ticker from Alpaca's multi-symbol endpoint.
+
+        One request covers ~100 symbols, so this is O(tickers / 100) and a full
+        pass over 1,500 tickers takes minutes, against hours on Massive. It also
+        overwrites the closes record_daily_closes wrote with the consolidated
+        (SIP) close, which is why both jobs can coexist.
+        """
+        with app.app_context():
+            from .. import db
+            from ..models.stock_history import StockHistory
+            from ..models.stock_available import AvailableStocks
+
+            if symbols is None:
+                symbols = sorted(avs.symbol for avs in AvailableStocks.query.all())
+            if not symbols:
+                return
+
+            tz = market_tz()
+            now = datetime.now(tz)
+            start = (now - timedelta(days=days)).date()
+            # A daily bar for today is incomplete until the session ends.
+            session_over = now.hour > 16 or (now.hour == 16 and now.minute >= 30)
+
+            succeeded, failed = 0, []
+            for i in range(0, len(symbols), ALPACA_CHUNK):
+                chunk = symbols[i:i + ALPACA_CHUNK]
+                try:
+                    rows = self._fetch_alpaca_bars(chunk, start, now.date(), session_over)
+                    self._upsert_history(rows)
+                    succeeded += len(chunk)
+                except Exception:
+                    db.session.rollback()
+                    failed.extend(chunk)
+                    logger.exception("Alpaca history sync failed for %d symbols", len(chunk))
+
+            try:
+                db.session.execute(db.delete(StockHistory).where(
+                    StockHistory.date < datetime.combine(start, dtime.min, tzinfo=tz)
+                ))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                logger.exception("Failed to prune old price history")
+
+            if failed:
+                logger.error("Alpaca history sync: %d succeeded, %d failed (%s)",
+                             succeeded, len(failed), ", ".join(failed[:20]))
+            else:
+                logger.info("Alpaca history sync finished: %d symbols", succeeded)
+
+    def _fetch_alpaca_bars(self, symbols, start, today, session_over):
+        """Return ``[{symbol, date, cp}]`` for one chunk, following pagination.
+
+        Results are sorted by symbol then time and the 10,000-point page limit is
+        shared across symbols, so a big chunk can span pages.
+        """
+        params = {
+            "symbols": ",".join(symbols),
+            "timeframe": "1Day",
+            "start": start.isoformat(),
+            "adjustment": "split",  # splits would otherwise show as fake price jumps
+            "feed": Alpaca.history_feed(),
+            "sort": "asc",
+            "limit": 10000,
+        }
+        rows = []
+        while True:
+            response = requests.get(
+                Alpaca.bars_url(), headers=Alpaca.headers(),
+                params=params, timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            for symbol, bars in (payload.get("bars") or {}).items():
+                for bar in bars:
+                    # Bars are stamped at midnight Eastern, in UTC.
+                    date = datetime.fromisoformat(bar["t"].replace("Z", "+00:00"))
+                    if date.astimezone(market_tz()).date() >= today and not session_over:
+                        continue
+                    rows.append({"symbol": symbol, "date": date, "cp": Decimal(str(bar["c"]))})
+            token = payload.get("next_page_token")
+            if not token:
+                return rows
+            params["page_token"] = token
+
+    def _upsert_history(self, rows):
+        from .. import db
+        from ..models.stock_history import StockHistory
+
+        if not rows:
+            return
+        if db.engine.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = pg_insert(StockHistory).values(rows)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uix_symbol_date", set_={"cp": stmt.excluded.cp}
+            )
+            db.session.execute(stmt)
+        else:
+            for row in rows:
+                existing = StockHistory.query.filter_by(symbol=row["symbol"], date=row["date"]).first()
+                if existing:
+                    existing.cp = row["cp"]
+                else:
+                    db.session.add(StockHistory(**row))
+        db.session.commit()
+
+    def _reconcile_massive(self, app, limit=None):
+        """Massive fallback: backfill new tickers and correct closes, within a budget.
 
         Massive's free tier is ~5 requests/min, so a full pass is O(tickers).
         Instead, each run covers ``limit`` symbols: tickers with thin history

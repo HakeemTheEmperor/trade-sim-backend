@@ -78,6 +78,16 @@ class Alpaca:
         return os.getenv("ALPACA_FEED") or "iex"
 
     @staticmethod
+    def bars_url():
+        return f"{Alpaca.base()}/v2/stocks/bars"
+
+    @staticmethod
+    def history_feed():
+        """Feed for historical daily bars. Unlike live data, the Basic plan can
+        read consolidated SIP history as long as it's over 15 minutes old."""
+        return os.getenv("ALPACA_HISTORY_FEED") or "sip"
+
+    @staticmethod
     def configured():
         return bool(os.getenv("ALPACA_API_KEY_ID") and os.getenv("ALPACA_API_SECRET_KEY"))
 
