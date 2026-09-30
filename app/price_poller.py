@@ -26,7 +26,9 @@ class PricePoller:
 
     def __init__(self, app, exclude_symbols=()):
         self.app = app
-        self.exclude_symbols = set(exclude_symbols)
+        # Deliberately not copied: the websocket listener changes this set in
+        # place as its hot set moves, and the poller must see those changes.
+        self.exclude_symbols = exclude_symbols
         self.interval = int(os.getenv("PRICE_POLL_INTERVAL_SECONDS", "60"))
         self._stop = threading.Event()
         self.thread = None

@@ -15,31 +15,93 @@ class WebSocketListener:
     def __init__(self, app):
         self.app = app
         self.ws_url = Finnhub.ws_url()
-        self.symbols = self.load_symbols()
+        # The live subscription set. PricePoller holds a reference to this exact
+        # object and polls everything outside it, so it is only ever mutated in
+        # place (see refresh_hot_set), never rebound.
+        self.symbols = set(self.load_symbols())
         self.ws = None
         self.thread = None
         self.running = True
         self.price_buffer = defaultdict(lambda: None)  # Buffer for latest prices
         self.buffer_lock = threading.Lock()  # Thread-safe buffer access
         self.update_interval = 30  # Seconds between DB updates
+        self.hot_refresh_interval = int(os.getenv("HOT_SET_REFRESH_SECONDS") or 3600)
         self.start_buffer_thread()  # Start the buffer processing thread
 
     def load_symbols(self):
+        """Pick the symbols worth a live websocket slot: the most-used tickers.
+
+        Finnhub's free websocket allows ~50 symbols; PricePoller covers the rest
+        and skips whatever this returns.
+        """
+        from sqlalchemy import func
+        from . import db
         from .models.stock_available import AvailableStocks
+        from .models.user_stock_wallet import UserStockWallet
+        from .models.watch_list import WatchList
+
+        max_symbols = int(os.getenv("FINNHUB_MAX_SYMBOLS") or 50)
         with self.app.app_context():
-            symbols = sorted(avs.symbol for avs in AvailableStocks.query.all())
-            # Finnhub's free websocket allows ~50 symbols; the rest are covered
-            # by PricePoller, which skips whatever this list holds.
-            max_symbols = int(os.getenv("FINNHUB_MAX_SYMBOLS", "50"))
-            return symbols[:max_symbols] if symbols else ["AAPL"]
+            stocks = db.session.query(AvailableStocks.symbol, AvailableStocks.market_cap).all()
+            if not stocks:
+                return ["AAPL"]
+
+            # Usage = users holding the stock + users watching it.
+            usage = {}
+            holders = (db.session.query(UserStockWallet.symbol, func.count())
+                       .filter(UserStockWallet.quantity > 0)
+                       .group_by(UserStockWallet.symbol).all())
+            watchers = (db.session.query(WatchList.stock_symbol, func.count())
+                        .group_by(WatchList.stock_symbol).all())
+            for symbol, n in holders + watchers:
+                usage[symbol] = usage.get(symbol, 0) + n
+
+            # Most used first; market cap breaks ties, so an empty app still
+            # streams the big names, then alphabetical for a stable order.
+            ranked = sorted(stocks, key=lambda s: (-usage.get(s[0], 0), -(s[1] or 0), s[0]))
+            return [symbol for symbol, _ in ranked[:max_symbols]]
+
+    def refresh_hot_set(self):
+        """Re-rank by current usage and move the websocket subscriptions to match.
+
+        Symbols that drop out are picked up by PricePoller on its next cycle.
+        """
+        try:
+            new = set(self.load_symbols())
+        except Exception:
+            logger.exception("Hot set refresh failed; keeping current subscriptions")
+            return
+        add, remove = new - self.symbols, self.symbols - new
+        if not add and not remove:
+            return
+
+        connected = bool(self.ws and self.ws.sock and self.ws.sock.connected)
+        if connected:
+            try:
+                for symbol in remove:
+                    self.ws.send(json.dumps({"type": "unsubscribe", "symbol": symbol}))
+                for symbol in add:
+                    self.ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
+            except Exception:
+                logger.exception("Failed to move websocket subscriptions; will retry next refresh")
+                return
+        # In place, so the poller's reference stays valid. When not connected,
+        # on_open subscribes to whatever this holds.
+        self.symbols |= add
+        self.symbols -= remove
+        logger.info("Hot set changed: +%d -%d (now %d symbols)", len(add), len(remove), len(self.symbols))
 
     def start_buffer_thread(self):
         self.buffer_thread = threading.Thread(target=self.process_buffer, daemon=True)
         self.buffer_thread.start()
 
     def process_buffer(self):
+        last_refresh = time.monotonic()
         while self.running:
             self.flush_buffer_to_db()
+            if time.monotonic() - last_refresh >= self.hot_refresh_interval:
+                self.refresh_hot_set()
+                last_refresh = time.monotonic()
             time.sleep(self.update_interval)
 
     def flush_buffer_to_db(self):
@@ -89,7 +151,7 @@ class WebSocketListener:
 
     def on_open(self, ws):
         logger.info("WebSocket connection opened")
-        for symbol in self.symbols:
+        for symbol in list(self.symbols):
             ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
 
     def start(self):

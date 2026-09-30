@@ -212,14 +212,19 @@ Table Editor) returns populated data.
 
 ### 3.5 Restart once after the first seed
 
-**Do this — it's easy to miss.** `WebSocketListener.__init__` reads the symbol
-list from `AvailableStocks` at construction time, which on a fresh database
-happens *before* the background seed has written anything. It falls back to
-`["AAPL"]`, so live prices only stream for Apple.
+`WebSocketListener.__init__` picks its symbols at construction time, which on a
+fresh database happens *before* the background seed has written anything. It
+falls back to `["AAPL"]` until the next hot-set refresh.
 
-After the first seed completes, hit **Manual Deploy → Restart service**. The
-listener then picks up all 45 symbols. This is a one-time fix — later restarts
-find a populated table.
+You no longer need to restart for this: the listener re-ranks every
+`HOT_SET_REFRESH_SECONDS` (default 1 hour) and moves its subscriptions to the
+most-held and most-watched tickers. In the meantime `PricePoller` covers every
+symbol the websocket doesn't, so nothing is left without a price as long as the
+Alpaca keys are set. A restart just makes it pick up sooner.
+
+Profiles load from `app/data/tickers.txt`, at most `FMP_DAILY_BUDGET` (240) new
+symbols per run, resuming each night. A list of 1,000 tickers therefore takes
+about four nights to fully profile; tickers appear as they load.
 
 ---
 

@@ -56,6 +56,19 @@ class Finnhub:
     def ws_url():
         return f"{Finnhub.base()}?token={os.getenv('FINNHUB_API_KEY')}"
 
+    @staticmethod
+    def rest_base():
+        return os.getenv("FINNHUB_BASE_URL") or "https://finnhub.io/api/v1"
+
+    @staticmethod
+    def profile_url(symbol):
+        return f"{Finnhub.rest_base()}/stock/profile2?symbol={symbol}"
+
+    @staticmethod
+    def headers():
+        # Header rather than query string, so the key stays out of URLs and logs.
+        return {"X-Finnhub-Token": os.getenv("FINNHUB_API_KEY")}
+
 
 class Alpaca:
     """Alpaca Market Data — bulk latest-trade snapshots for the long tail of

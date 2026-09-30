@@ -1,0 +1,55 @@
+# The tradable universe: one ticker per line, '#' starts a comment.
+#
+# Adding a ticker is just adding a line. The nightly job profiles new symbols
+# through FMP (FMP_DAILY_BUDGET a run, resuming the next night), then live
+# prices and history pick them up automatically. Removing a line does NOT delete
+# the stock, since users may hold it.
+#
+# Only list symbols Alpaca's IEX feed trades. OTC tickers and thinly traded
+# ADRs may never receive a price; the staleness report will flag them.
+
+AAPL
+NVDA
+MSFT
+AMZN
+GOOG
+META
+TSM
+TSLA
+WMT
+JPM
+V
+MA
+ORCL
+UNH
+XOM
+NFLX
+PG
+HD
+KO
+TMUS
+CVX
+TM
+PM
+IBM
+MCD
+PEP
+AXP
+DIS
+SHEL
+GS
+ADBE
+CAT
+XIACF
+UBER
+SONY
+SHOP
+UL
+TTE
+SBUX
+SPOT
+NKE
+INTC
+UPS
+RACE
+ABNB
