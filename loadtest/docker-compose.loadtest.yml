@@ -45,6 +45,7 @@ services:
       SWAGGER_URL: /docs
       RUN_BACKGROUND_JOBS: "false"
       TRUSTED_PROXY_HOPS: "0"
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 3s

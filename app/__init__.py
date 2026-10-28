@@ -50,6 +50,29 @@ def env_int(name, default):
         return default
 
 
+DEFAULT_GUNICORN_THREADS = 4
+DEFAULT_DB_MAX_OVERFLOW = 10
+
+
+def engine_options():
+    """SQLAlchemy connection pool settings, sized from the web server's threads.
+
+    Every request thread holds one database connection for the length of its
+    request, so a pool smaller than the thread count makes threads queue for a
+    connection (30s timeout), which looks like latency rather than an error. The
+    pool therefore defaults to the thread count, never below SQLAlchemy's usual
+    5, with the usual 10 of burst headroom on top. Both are overridable.
+
+    Keep pool_size + max_overflow, times the number of processes, under the
+    database's max_connections.
+    """
+    threads = env_int("GUNICORN_THREADS", DEFAULT_GUNICORN_THREADS)
+    return {
+        "pool_size": env_int("DB_POOL_SIZE", max(5, threads)),
+        "max_overflow": env_int("DB_MAX_OVERFLOW", DEFAULT_DB_MAX_OVERFLOW),
+    }
+
+
 # Every blueprint is mounted under this prefix, and the OpenAPI paths are written
 # relative to it (`/auth/signin`, not `/api/v1/auth/signin`). Anything handing
 # out a base URL has to include it.
@@ -242,6 +265,7 @@ def create_app():
     
     # Connect to Postgresql running in Docker
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI")
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options()
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = env_flag("SQLALCHEMY_TRACK_MODIFICATIONS", "False")
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=env_int("JWT_ACCESS_TOKEN_EXPIRES", 6))
