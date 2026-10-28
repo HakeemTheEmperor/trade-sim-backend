@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from sqlalchemy import asc, desc
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.custom_exceptions import DataNotFound
 from app.models.transactions import Transaction, TransactionCategory, TransactionType
 from app.models.user import User
@@ -148,24 +149,37 @@ class StocksService:
             if market_value < MIN_TRADE_VALUE:
                 raise ValueError(f"Trade value must be at least ${MIN_TRADE_VALUE}")
 
-            # Lock the wallet row for the duration of the transaction so two
-            # concurrent buys can't both pass the balance check (double-spend).
-            wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
-            if not wallet:
-                raise DataNotFound("We did not find the specified wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
-            # Checked against total_cost, NOT market_value. Testing affordability
-            # against the pre-spread figure would let a full-balance buy overdraw
-            # by exactly the spread.
-            if wallet.balance < total_cost:
+            # One statement checks the wallet exists, is the caller's and can
+            # cover the cost, and debits it. The UPDATE holds the row lock to
+            # commit, and a concurrent buy re-checks the balance against the
+            # committed row once the lock frees, so two buys can never spend the
+            # same money (no separate SELECT ... FOR UPDATE needed).
+            #
+            # The check is against total_cost, NOT market_value. Testing
+            # affordability against the pre-spread figure would let a
+            # full-balance buy overdraw by exactly the spread.
+            debited = db.session.execute(
+                db.update(Wallet)
+                .where(Wallet.id == wallet_id, Wallet.user_id == int(user_id), Wallet.balance >= total_cost)
+                .values(balance=Wallet.balance - total_cost)
+                .returning(Wallet.currency)
+                .execution_options(synchronize_session=False)
+            ).first()
+            if debited is None:
+                # The failure path is rare, so it can afford a read to say why.
+                if not db.session.query(Wallet.id).filter_by(id=wallet_id, user_id=int(user_id)).first():
+                    raise DataNotFound("We did not find the specified wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
                 raise ValueError("Insufficient balance.")
-            wallet.balance -= total_cost
 
-            stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).with_for_update().first()
-            if stock_wallet:
-                stock_wallet.quantity += quantity
-            else:
-                stock_wallet = UserStockWallet(user_id=user_id, symbol=symbol, quantity=quantity)
-            
+            # Add to the holding, or open it, in one statement. The unique
+            # (user_id, symbol) constraint makes this race-free: concurrent first
+            # buys cannot create two rows for the same position.
+            holding = pg_insert(UserStockWallet).values(user_id=int(user_id), symbol=symbol, quantity=quantity)
+            db.session.execute(holding.on_conflict_do_update(
+                index_elements=["user_id", "symbol"],
+                set_={"quantity": UserStockWallet.quantity + holding.excluded.quantity},
+            ))
+
             transaction_log = Transaction(
                 user_id=user_id,
                 from_wallet_id=wallet_id,
@@ -176,12 +190,11 @@ class StocksService:
                 price_per_share=execution_price,
                 transaction_type=TransactionType.BUY,
                 transaction_category=TransactionCategory.STOCK_TRADE,
-                currency=wallet.currency,
+                currency=debited.currency,
                 total_value=total_cost,
                 fee=fee
             )
             db.session.add(transaction_log)
-            db.session.add(stock_wallet)
             db.session.commit()
             # Notify shadows AFTER the trade commits. Privacy-safe (symbol +
             # action only) and best-effort — it can't fail or roll back the trade.
@@ -205,10 +218,6 @@ class StocksService:
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
                 raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
-            # Lock the holding so concurrent sells can't oversell the same shares.
-            stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).with_for_update().first()
-            if not stock_wallet or stock_wallet.quantity < quantity:
-                raise ValueError(f"You do not have {quantity} units of {stock.company_name} stock")
             # Price comes with the stock (lazy='joined'); the name is read before
             # commit() expires `stock`. See buy_stocks.
             stock_price = stock.price
@@ -228,15 +237,41 @@ class StocksService:
             if total_cost <= 0:
                 raise ValueError("This quantity is too small to sell at the current price")
 
-            wallet = Wallet.query.filter_by(user_id=user_id, id=wallet_id).with_for_update().first()
-            if not wallet or wallet.currency != WalletCurrencyType.USD:
+            # Wallet first, holding second: the same order buy takes its locks in,
+            # so one user buying and selling at once cannot deadlock.
+            credited = db.session.execute(
+                db.update(Wallet)
+                .where(Wallet.id == wallet_id, Wallet.user_id == int(user_id),
+                       Wallet.currency == WalletCurrencyType.USD)
+                .values(balance=Wallet.balance + total_cost)
+                .returning(Wallet.id)
+                .execution_options(synchronize_session=False)
+            ).first()
+            if credited is None:
                 raise DataNotFound("We did not find a USD wallet for this user", ErrorStatuses.WALLET_NOT_FOUND.value)
-            wallet.balance += total_cost
-            stock_wallet.quantity -= quantity
-            
-            if stock_wallet.quantity == 0:
-                db.session.delete(stock_wallet)
-            
+
+            # The quantity check lives in the WHERE clause, so concurrent sells
+            # cannot oversell the same shares: the row lock serialises them and
+            # each re-checks against what is left.
+            remaining = db.session.execute(
+                db.update(UserStockWallet)
+                .where(UserStockWallet.user_id == int(user_id), UserStockWallet.symbol == symbol,
+                       UserStockWallet.quantity >= quantity)
+                .values(quantity=UserStockWallet.quantity - quantity)
+                .returning(UserStockWallet.quantity)
+                .execution_options(synchronize_session=False)
+            ).scalar()
+            if remaining is None:
+                db.session.rollback()  # undo the credit above
+                raise ValueError(f"You do not have {quantity} units of {company_name} stock")
+            if remaining == 0:
+                db.session.execute(
+                    db.delete(UserStockWallet)
+                    .where(UserStockWallet.user_id == int(user_id), UserStockWallet.symbol == symbol,
+                           UserStockWallet.quantity == 0)
+                    .execution_options(synchronize_session=False)
+                )
+
             transaction_log = Transaction(
                 user_id=user_id,
                 from_wallet_id=wallet_id,
@@ -245,7 +280,7 @@ class StocksService:
                 price_per_share=execution_price,
                 transaction_type=TransactionType.SELL,
                 transaction_category=TransactionCategory.STOCK_TRADE,
-                currency=wallet.currency,
+                currency=WalletCurrencyType.USD,
                 total_value=total_cost,
                 fee=fee
             )

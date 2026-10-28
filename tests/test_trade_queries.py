@@ -17,8 +17,8 @@ from app import db
 from app.models.user_stock_wallet import UserStockWallet
 from tests.factories import make_stock, make_user, make_wallet
 
-BUY_STATEMENT_BUDGET = 8
-SELL_STATEMENT_BUDGET = 8
+BUY_STATEMENT_BUDGET = 6
+SELL_STATEMENT_BUDGET = 6
 
 
 class Statements:
@@ -65,6 +65,8 @@ def test_buy_stays_within_its_statement_budget(app):
     assert len(statements.touching("revoked_tokens")) == 1  # token checked once, not twice
     assert len(statements.touching("available_stocks")) == 1  # not re-read after commit
     assert len(statements.touching("stock_price")) == 0  # price arrives with the stock
+    # Balance and holding are each changed by one statement, not locked then updated.
+    assert not [s for s in statements.sent if "FOR UPDATE" in s]
     db.session.expire_all()
     assert UserStockWallet.query.filter_by(user_id=user_id).one().quantity == Decimal("1")
 
@@ -89,3 +91,4 @@ def test_sell_stays_within_its_statement_budget(app):
     assert len(statements.touching("revoked_tokens")) == 1
     assert len(statements.touching("available_stocks")) == 1
     assert len(statements.touching("stock_price")) == 0
+    assert not [s for s in statements.sent if "FOR UPDATE" in s]

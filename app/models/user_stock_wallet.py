@@ -10,10 +10,12 @@ class UserStockWallet(db.Model):
     
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=db.func.current_timestamp())
 
-    # Leads with user_id, so it serves "all holdings for these users" as well as
-    # the (user_id, symbol) lookups that trades and quantity checks make.
+    # One row per position. Trades add to it with INSERT ... ON CONFLICT, which
+    # needs this constraint, and it stops concurrent first buys creating two rows
+    # for the same holding. Its index leads with user_id, so it also serves "all
+    # holdings for these users" and the (user_id, symbol) lookups.
     __table_args__ = (
-        db.Index("ix_users_stock_wallet_user_symbol", "user_id", "symbol"),
+        db.UniqueConstraint("user_id", "symbol", name="uq_users_stock_wallet_user_symbol"),
     )
 
     def to_dict(self):

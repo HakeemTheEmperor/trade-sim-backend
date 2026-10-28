@@ -100,6 +100,30 @@ def test_concurrent_buys_cannot_overdraw_wallet(app, capsys):
     assert overdrafts == 0
 
 
+def test_concurrent_first_buys_from_two_wallets_keep_one_holding(app):
+    # Two wallets mean two independent wallet locks, so nothing serialises these
+    # buys except the unique constraint on the position itself. Before it, two
+    # first buys could each create a row, splitting one position in two.
+    buys = 40
+    user = make_user()
+    wallets = [make_wallet(user, balance="100000") for _ in range(2)]
+    make_stock("TEST", price="100")
+    user_id, wallet_ids = user.id, [w.id for w in wallets]
+
+    results = run_concurrently(
+        app, buys,
+        lambda i: classify(
+            lambda: StocksService().buy_stocks(user_id, "TEST", wallet_ids[i % 2], 1),
+            rejection="never refused",
+        ),
+    )
+
+    assert results == ["ok"] * buys
+    db.session.expire_all()
+    holdings = UserStockWallet.query.filter_by(user_id=user_id).all()
+    assert len(holdings) == 1 and holdings[0].quantity == buys
+
+
 def test_concurrent_sells_cannot_oversell_a_position(app, capsys):
     held = 10
     sells = 200
