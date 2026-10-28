@@ -21,7 +21,8 @@ class AvailableStocks(db.Model):
             'symbol': self.symbol,
             'company_name': self.company_name,
             'image': self.image,
-            'price': self.price.to_dict(),
+            # A freshly profiled ticker may not have a price row yet.
+            'price': self.price.to_dict() if self.price else None,
         }
 
     def to_dict(self, include_price=True):
