@@ -17,11 +17,7 @@ live table is assembled:
 A league is capped at MAX_LEAGUE_MEMBERS (50), so league size, not the 10,000
 users, sets the work. The users exist so Postgres plans the queries against
 realistic table sizes (index vs sequential scan) rather than near-empty tables.
-
-Run with PERF_WITH_INDEXES=1 to add indexes on wallets.user_id and
-users_stock_wallet.user_id first, which shows what the schema is missing.
 """
-import os
 import statistics
 import time
 from datetime import datetime, timedelta, timezone
@@ -50,7 +46,6 @@ LEAGUE_SIZE = 50  # the product cap, MAX_LEAGUE_MEMBERS
 RUNS = 15
 WARMUP = 3
 STARTING_EQUITY = Decimal("100000")
-WITH_INDEXES = os.getenv("PERF_WITH_INDEXES") == "1"
 
 
 def _price(i):
@@ -126,12 +121,6 @@ def seeded():
     db.session.flush()
     db.session.add_all(LeagueMembership(league_id=league.id, user_id=uid) for uid in ids[:LEAGUE_SIZE])
     db.session.commit()
-    if WITH_INDEXES:
-        # What-if: the schema has no index on wallets.user_id or
-        # users_stock_wallet.user_id (Postgres does not index foreign keys by itself).
-        db.session.execute(text("CREATE INDEX ix_whatif_wallets_user ON wallets (user_id)"))
-        db.session.execute(text("CREATE INDEX ix_whatif_holdings_user ON users_stock_wallet (user_id)"))
-        db.session.commit()
     db.session.execute(text("ANALYZE"))  # plans must reflect the data, not an empty table's stats
     db.session.commit()
 

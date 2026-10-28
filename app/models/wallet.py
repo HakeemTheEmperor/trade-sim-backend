@@ -16,7 +16,13 @@ class Wallet(db.Model):
     currency = db.Column(db.Enum(WalletCurrencyType), default=WalletCurrencyType.USD, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=db.func.current_timestamp(), onupdate=db.func.current_timestamp(), nullable=False)
-    
+
+    # Postgres does not index foreign keys itself; without this every
+    # "wallets for user X" lookup scans the whole table.
+    __table_args__ = (
+        db.Index("ix_wallets_user_id", "user_id"),
+    )
+
     # Fix: Use a string reference for Transaction to avoid circular import
     sent_transactions = db.relationship('Transaction', foreign_keys='[Transaction.from_wallet_id]', backref='sender_wallet', lazy=True)
     received_transactions = db.relationship('Transaction', foreign_keys='[Transaction.to_wallet_id]', backref='receiver_wallet', lazy=True)

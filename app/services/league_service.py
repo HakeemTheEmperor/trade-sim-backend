@@ -3,6 +3,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 from .. import db
 from ..custom_exceptions import AlreadyExists, DataNotFound, LimitReached
@@ -263,7 +264,10 @@ class LeagueService:
         if not season:
             raise DataNotFound("No season is currently running")
 
+        # Users are joined in here: lazy-loading participant.user below cost one
+        # query per member.
         participants = (SeasonParticipant.query
+                        .options(joinedload(SeasonParticipant.user))
                         .filter(SeasonParticipant.season_id == season.id,
                                 SeasonParticipant.user_id.in_(member_ids))
                         .all())
@@ -300,17 +304,20 @@ class LeagueService:
     def career_table(self, user_id, league_id):
         league, member_ids = self._member_ids(user_id, league_id)
         equity = self._equity_for(member_ids)
+        # One query for every member's name, not one per member.
+        usernames = dict(db.session.query(User.id, User.username)
+                         .filter(User.id.in_(member_ids)).all())
 
         rows = []
         for uid in member_ids:
-            user = User.query.get(uid)
-            if not user:
+            username = usernames.get(uid)
+            if username is None:
                 continue
             value = equity.get(uid, Decimal(0))
             change = (value - STARTING_EQUITY_USD) / STARTING_EQUITY_USD * 100
             rows.append({
                 "user_id": uid,
-                "username": user.username,
+                "username": username,
                 # Three decimals to match what the UI renders. At two the
                 # backend was rounding away everything below 0.005%, while
                 # PercentageChange padded the result out to three digits — so a
