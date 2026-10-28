@@ -16,6 +16,11 @@ flask-swagger-ui = "*"
 apscheduler = "*"
 gunicorn = "*"
 flask-migrate = "*"
+# SQLAlchemy 2.1 made plain postgresql:// URLs default to the psycopg (v3)
+# driver, which this app does not install (it uses psycopg2-binary), so the app
+# crashes on startup with "No module named 'psycopg'". Stay on 2.0 until the
+# driver is switched deliberately.
+sqlalchemy = "<2.1"
 
 [dev-packages]
 pytest = "*"

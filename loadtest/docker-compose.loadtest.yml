@@ -1,0 +1,55 @@
+# Production-shaped stack for the k6 trade load test: the real Dockerfile, so the
+# app runs under gunicorn with one worker and four threads exactly as it does on
+# Render, in front of its own Postgres.
+#
+#   docker compose -f loadtest/docker-compose.loadtest.yml up -d --build --wait
+#   python loadtest/seed.py
+#   k6 run -e RATE=100 loadtest/trade.js
+#   docker compose -f loadtest/docker-compose.loadtest.yml down -v
+#
+# Deliberately NOT tuned for speed: Postgres keeps its default durability
+# settings (fsync on), so commit latency is realistic. Background jobs are off
+# (no price websocket, poller or scheduler), which a deployed instance does run.
+name: imockmarket-loadtest
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: load
+      POSTGRES_PASSWORD: load
+      POSTGRES_DB: imockmarket_load
+    ports:
+      - "5434:5432"
+    volumes:
+      - loadtest-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U load -d imockmarket_load"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SQLALCHEMY_DATABASE_URI: postgresql://load:load@db:5432/imockmarket_load
+      JWT_SECRET_KEY: loadtest-only-secret-key-that-is-long-enough-for-hs256
+      JWT_COOKIE_SECURE: "False"
+      SWAGGER_URL: /docs
+      RUN_BACKGROUND_JOBS: "false"
+      TRUSTED_PROXY_HOPS: "0"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+volumes:
+  loadtest-pgdata:
