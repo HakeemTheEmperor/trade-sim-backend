@@ -33,6 +33,12 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+    # Resource limits, to load test the instance size you actually deploy on.
+    # Render's free instance is 0.1 CPU and 512 MB:
+    #   APP_CPUS=0.1 APP_MEM=512m docker compose -f loadtest/docker-compose.loadtest.yml up -d --force-recreate app
+    # The defaults leave the app effectively unconstrained (the Docker VM's 4 CPUs).
+    cpus: ${APP_CPUS:-4}
+    mem_limit: ${APP_MEM:-8g}
     ports:
       - "5001:5000"
     depends_on:
@@ -46,6 +52,7 @@ services:
       RUN_BACKGROUND_JOBS: "false"
       TRUSTED_PROXY_HOPS: "0"
       GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 3s

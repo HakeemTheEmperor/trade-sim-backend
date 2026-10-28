@@ -51,7 +51,29 @@ def env_int(name, default):
 
 
 DEFAULT_GUNICORN_THREADS = 4
+DEFAULT_GUNICORN_WORKERS = 1
 DEFAULT_DB_MAX_OVERFLOW = 10
+
+
+def background_jobs_enabled():
+    """Whether this process should run the scheduler, price feeds and seeding.
+
+    Those jobs must run in exactly one process: two schedulers would double
+    every nightly job, and two websocket listeners would double the writes. A
+    gunicorn worker count above one starts that many copies of this app, so the
+    combination is refused outright instead of being left to duplicate quietly.
+    With several workers, run the jobs in a separate single-process service and
+    set RUN_BACKGROUND_JOBS=false here (see docs/scaling.md).
+    """
+    enabled = env_flag("RUN_BACKGROUND_JOBS", "true")
+    workers = env_int("GUNICORN_WORKERS", DEFAULT_GUNICORN_WORKERS)
+    if enabled and workers > 1:
+        raise RuntimeError(
+            f"GUNICORN_WORKERS={workers} with RUN_BACKGROUND_JOBS enabled would run the "
+            "scheduler and price feeds once per worker. Set RUN_BACKGROUND_JOBS=false on "
+            "this service and run the background jobs in a separate single-worker service."
+        )
+    return enabled
 
 
 def engine_options():
@@ -456,7 +478,7 @@ def create_app():
     # have been applied. It's gated so `flask db ...` CLI commands (which set
     # RUN_BACKGROUND_JOBS=false) can build the app without triggering any of it,
     # and so extra web workers/instances don't duplicate the scheduler/websocket.
-    if env_flag("RUN_BACKGROUND_JOBS", "true"):
+    if background_jobs_enabled():
         with app.app_context():
             create_admin()
 

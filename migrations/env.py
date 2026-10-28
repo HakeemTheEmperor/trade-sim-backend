@@ -2,6 +2,7 @@ import logging
 from logging.config import fileConfig
 
 from flask import current_app
+from sqlalchemy import text
 
 from alembic import context
 
@@ -104,6 +105,13 @@ def run_migrations_online():
         )
 
         with context.begin_transaction():
+            if connection.dialect.name == "postgresql":
+                # bootstrap.sh runs `flask db upgrade` on every start, so a web
+                # service and a worker service deploying together would both
+                # apply the same migration. This lock makes the second wait; it
+                # then sees the first one's committed version and has nothing
+                # left to do. It is released automatically at commit.
+                connection.execute(text("SELECT pg_advisory_xact_lock(7272741)"))
             context.run_migrations()
 
 
