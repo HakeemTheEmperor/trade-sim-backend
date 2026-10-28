@@ -56,6 +56,61 @@ class Finnhub:
     def ws_url():
         return f"{Finnhub.base()}?token={os.getenv('FINNHUB_API_KEY')}"
 
+    @staticmethod
+    def rest_base():
+        return os.getenv("FINNHUB_BASE_URL") or "https://finnhub.io/api/v1"
+
+    @staticmethod
+    def profile_url(symbol):
+        return f"{Finnhub.rest_base()}/stock/profile2?symbol={symbol}"
+
+    @staticmethod
+    def headers():
+        # Header rather than query string, so the key stays out of URLs and logs.
+        return {"X-Finnhub-Token": os.getenv("FINNHUB_API_KEY")}
+
+
+class Alpaca:
+    """Alpaca Market Data — bulk latest-trade snapshots for the long tail of
+    tickers the Finnhub websocket can't cover.
+
+    Credentials go in headers, not the URL. The free plan only serves the IEX
+    feed, so ``feed`` defaults to ``iex``.
+    """
+
+    @staticmethod
+    def base():
+        return os.getenv("ALPACA_DATA_URL") or "https://data.alpaca.markets"
+
+    @staticmethod
+    def snapshots_url():
+        return f"{Alpaca.base()}/v2/stocks/snapshots"
+
+    @staticmethod
+    def feed():
+        return os.getenv("ALPACA_FEED") or "iex"
+
+    @staticmethod
+    def bars_url():
+        return f"{Alpaca.base()}/v2/stocks/bars"
+
+    @staticmethod
+    def history_feed():
+        """Feed for historical daily bars. Unlike live data, the Basic plan can
+        read consolidated SIP history as long as it's over 15 minutes old."""
+        return os.getenv("ALPACA_HISTORY_FEED") or "sip"
+
+    @staticmethod
+    def configured():
+        return bool(os.getenv("ALPACA_API_KEY_ID") and os.getenv("ALPACA_API_SECRET_KEY"))
+
+    @staticmethod
+    def headers():
+        return {
+            "APCA-API-KEY-ID": os.getenv("ALPACA_API_KEY_ID"),
+            "APCA-API-SECRET-KEY": os.getenv("ALPACA_API_SECRET_KEY"),
+        }
+
 
 class ExchangeRate:
     """exchangerate-api.com. EXCHANGE_RATE_API is the base incl. the key segment,

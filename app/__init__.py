@@ -18,6 +18,7 @@ import threading
 from dotenv import load_dotenv
 from .error_handlers import register_error_handlers
 from .websocket_listener import WebSocketListener
+from .price_poller import PricePoller
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -157,16 +158,16 @@ def run_initial_seed(app):
     """Populate stocks and price history, but only if the tables are empty.
 
     Both jobs are re-run nightly by the scheduler and prices also stream in over
-    the Finnhub websocket, so on boot they only need to fill a fresh database.
-    Re-seeding every start would otherwise spend ~45 FMP requests per boot (out
-    of 250/day on the free tier) to write data that's already there.
+    the Finnhub websocket and the Alpaca poller, so on boot they only need to
+    fill a fresh database.
 
-    Runs on a background thread because a first seed takes ~15 minutes:
-    update_price_history sleeps 20s between symbols for Polygon's rate limit,
-    which is far longer than gunicorn's worker-boot timeout.
+    Runs on a background thread because a first seed can take a while: profiles
+    are capped at FMP_DAILY_BUDGET a run (the rest resume nightly) and the
+    history backfill makes network calls, far longer than gunicorn's
+    worker-boot timeout.
 
-    Trade-off: a newly added symbol in DataSeed's default list won't appear
-    until the nightly job runs, since a non-empty table skips the boot seed.
+    Trade-off: a ticker added to app/data/tickers.txt won't appear until the
+    nightly job runs, since a non-empty table skips the boot seed.
     """
     from .data_seed import DataSeed
     from .models.stock_available import AvailableStocks
@@ -186,7 +187,7 @@ def run_initial_seed(app):
 
         if needs_history:
             logger.info("No price history found; running initial history backfill")
-            UpdateHistory().update_price_history(app)
+            UpdateHistory().backfill(app)
         else:
             logger.info("Price history already present; skipping initial backfill")
     except Exception:
@@ -390,7 +391,8 @@ def create_app():
     from .models.league import League, LeagueMembership
     from .data_seed import DataSeed
     from .utils.update_history import UpdateHistory
-    
+    from .utils.price_health import report_stale_prices
+
 
     
     # Register Error Handlers
@@ -453,10 +455,22 @@ def create_app():
         update_history = UpdateHistory()
         scheduler = BackgroundScheduler()
         scheduler.add_job(DataSeed.load_available_stocks, CronTrigger(hour=0, minute=0, second=0), args=[app])
-        scheduler.add_job(update_history.update_price_history, CronTrigger(hour=0, minute=5, second=0), args=[app])
+        # Daily close comes from the prices we already stream, so it costs no
+        # provider requests and doesn't scale with ticker count.
+        scheduler.add_job(update_history.record_daily_closes, CronTrigger(hour=0, minute=5, second=0), args=[app])
+        # Alpaca bulk bars backfill new tickers and replace the recorded closes
+        # with consolidated ones (minutes, not hours). Without Alpaca keys it
+        # falls back to a budgeted Massive pass. Scheduled after the snapshot/
+        # season jobs so it never overlaps them.
+        scheduler.add_job(update_history.reconcile_price_history, CronTrigger(hour=2, minute=0, second=0), args=[app])
         # Snapshot after the nightly price refresh, so equity is valued against
         # the prices that job just wrote rather than yesterday's.
         scheduler.add_job(leaderboard.snapshot_all, CronTrigger(hour=1, minute=0, second=0), args=[app])
+        # Market cap is the one profile field that drifts; Finnhub's rate limit
+        # makes this a ~30 minute run at 1,500 tickers, so it gets its own slot.
+        scheduler.add_job(DataSeed.refresh_market_caps, CronTrigger(hour=3, minute=0, second=0), args=[app])
+        # Flags tickers that are listed but never receive a price (OTC, thin ADRs).
+        scheduler.add_job(report_stale_prices, CronTrigger(hour=4, minute=0, second=0), args=[app])
         # Rolls into the next season once the current one lapses. Runs daily
         # because the boundary only needs to be noticed within a day, and a
         # missed run self-corrects on the next one.
@@ -466,6 +480,11 @@ def create_app():
 
         websocket_listener = WebSocketListener(app)
         websocket_listener.start()
+
+        # Covers every ticker beyond the websocket's symbol cap.
+        price_poller = PricePoller(app, exclude_symbols=websocket_listener.symbols)
+        price_poller.start()
+        atexit.register(price_poller.stop)
     else:
         logger.info("RUN_BACKGROUND_JOBS is disabled; skipping DB startup work (admin/seed/scheduler/websocket)")
 

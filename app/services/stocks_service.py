@@ -24,6 +24,10 @@ from .. import db
 
 logger = logging.getLogger(__name__)
 
+# Search is unpaginated, so cap it: a one-letter query would otherwise return
+# hundreds of rows once the universe grows.
+SEARCH_RESULT_LIMIT = 50
+
 class StocksService:
     def get_available_stocks(self, page=1, rows=10, sort_by='symbol', sort='asc'):
         page, rows = clamp_pagination(page, rows)
@@ -70,7 +74,11 @@ class StocksService:
         
     def search_stocks_by_symbol(self, symbol):
         try:
-            stocks = AvailableStocks.query.filter(AvailableStocks.symbol.ilike(f"%{symbol}%")).all()
+            stocks = (AvailableStocks.query
+                      .filter(AvailableStocks.symbol.ilike(f"%{symbol}%"))
+                      .order_by(AvailableStocks.symbol)
+                      .limit(SEARCH_RESULT_LIMIT)
+                      .all())
             return [stock.to_short_list() for stock in stocks]
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
@@ -86,7 +94,11 @@ class StocksService:
         
     def get_stocks_by_company_name(self, name):
         try:
-            stocks = AvailableStocks.query.filter(AvailableStocks.company_name.ilike(f"%{name}%")).all()
+            stocks = (AvailableStocks.query
+                      .filter(AvailableStocks.company_name.ilike(f"%{name}%"))
+                      .order_by(AvailableStocks.symbol)
+                      .limit(SEARCH_RESULT_LIMIT)
+                      .all())
             return [stock.to_short_list() for stock in stocks]
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured: {str(e)}")
