@@ -61,12 +61,19 @@ def _client_key(endpoint):
     TRUSTED_PROXY_HOPS in app/__init__.py.
     """
     try:
-        # optional=True so this is a no-op on unauthenticated routes rather
-        # than raising. Wrapped because a malformed/expired token (or a CSRF
-        # failure on a re-login) should degrade to IP keying, not 500.
-        verify_jwt_in_request(optional=True)
-        identity = get_jwt_identity()
+        try:
+            # On a route that sits under @jwt_required() the token has already
+            # been decoded and checked against the blocklist (a database query);
+            # verifying it again here would repeat that work on every request.
+            identity = get_jwt_identity()
+        except RuntimeError:
+            # Nothing has verified a token yet (signup, signin, ...). optional=True
+            # makes this a no-op when there is none rather than raising.
+            verify_jwt_in_request(optional=True)
+            identity = get_jwt_identity()
     except Exception:
+        # A malformed/expired token (or a CSRF failure on a re-login) should
+        # degrade to IP keying, not 500.
         identity = None
 
     if identity:

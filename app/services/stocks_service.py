@@ -129,9 +129,14 @@ class StocksService:
             stock = AvailableStocks.query.filter_by(symbol=symbol).first()
             if not stock:
                 raise DataNotFound("We could not find any stock with that symbol. Confirm symbol and try again", ErrorStatuses.STOCK_NOT_FOUND.value)
-            stock_price = StockPrice.query.filter_by(symbol=symbol).first()
+            # The price rides in on the stock query (the relationship is
+            # lazy='joined'), so it needs no lookup of its own. The name is read
+            # now because commit() expires `stock`, and touching it afterwards
+            # for the response message would cost another query.
+            stock_price = stock.price
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
+            company_name = stock.company_name
             current_price = stock_price.current_price
             # You buy at the ask, i.e. above the quoted mid. market_value is what
             # the position is worth the moment you own it, total_cost is what you
@@ -181,7 +186,7 @@ class StocksService:
             # Notify shadows AFTER the trade commits. Privacy-safe (symbol +
             # action only) and best-effort — it can't fail or roll back the trade.
             self._notify_shadows(user_id, "BUY", symbol)
-            return {"message": f"You have successfully PURCHASED {quantity} unit of {stock.company_name} stocks for {quantity * current_price}"}
+            return {"message": f"You have successfully PURCHASED {quantity} unit of {company_name} stocks for {quantity * current_price}"}
         except DataNotFound:
             raise
         except ValueError:
@@ -204,9 +209,12 @@ class StocksService:
             stock_wallet = UserStockWallet.query.filter_by(user_id=user_id, symbol=symbol).with_for_update().first()
             if not stock_wallet or stock_wallet.quantity < quantity:
                 raise ValueError(f"You do not have {quantity} units of {stock.company_name} stock")
-            stock_price = StockPrice.query.filter_by(symbol=symbol).first()
+            # Price comes with the stock (lazy='joined'); the name is read before
+            # commit() expires `stock`. See buy_stocks.
+            stock_price = stock.price
             if not stock_price:
                 raise DataNotFound(f"No price data available for {symbol}", ErrorStatuses.PRICE_NOT_FOUND.value)
+            company_name = stock.company_name
             current_price = stock_price.current_price
             # You sell at the bid, i.e. below the quoted mid.
             execution_price = sell_execution_price(current_price)
@@ -244,7 +252,7 @@ class StocksService:
             db.session.add(transaction_log)
             db.session.commit()
             self._notify_shadows(user_id, "SELL", symbol)
-            return {"message": f"You have successfully SOLD {quantity} unit of {stock.company_name} stocks for {total_cost}"}
+            return {"message": f"You have successfully SOLD {quantity} unit of {company_name} stocks for {total_cost}"}
         except DataNotFound:
             raise
         except ValueError:
