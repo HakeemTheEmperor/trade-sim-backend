@@ -1,0 +1,28 @@
+# Throwaway Postgres for the test suite. Separate from docker-compose.yml on
+# purpose: different port (so it never collides with a dev database on 5432),
+# no persistent volume, and settings tuned for speed and concurrency tests.
+#
+#   docker compose -f docker-compose.test.yml up -d --wait
+#   python -m pytest
+#   docker compose -f docker-compose.test.yml down
+services:
+  test-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: imockmarket_test
+    ports:
+      - "5433:5432"
+    # Data lives in RAM and is gone on `down`: nothing to clean up, and no way
+    # for test data to outlive the container.
+    tmpfs:
+      - /var/lib/postgresql/data
+    # fsync off: durability is irrelevant here and it makes truncate-per-test
+    # cheap. max_connections is raised for the 500-thread double-spend test.
+    command: postgres -c fsync=off -c synchronous_commit=off -c max_connections=300
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d imockmarket_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
